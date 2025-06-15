@@ -100,7 +100,10 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
 
     if not is_cursor_in_block then
       if opts.conceal_dimmed then
-        M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+        -- Get proper indentation for regular blocks (content level)
+        local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
+        local base_indent = first_line:match("^%s*") or ""
+        M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
       else
         M.compress_regular_block(bufnr, block)
       end
@@ -123,7 +126,9 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
     if not is_cursor_in_if then
       if opts.conceal_dimmed then
         -- Include the closing brace for inline blocks
-        M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row)
+        local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
+        local if_indent = if_line:match("^%s*") or ""
+        M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
       else
         M.compress_inline_block(bufnr, block)
       end
@@ -147,7 +152,7 @@ function M.compress_regular_block(bufnr, block)
   vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
     end_col = #first_line_text,
     conceal = "",
-    virt_text = { { indent .. compressed, "Conceal" } },
+    virt_text = { { indent .. " " .. compressed, "Conceal" } },
     virt_text_pos = "overlay",
   })
 
@@ -184,7 +189,7 @@ function M.compress_inline_block(bufnr, block)
   vim.api.nvim_buf_set_extmark(bufnr, namespace, block.block_start_row + 1, 0, {
     end_col = #first_content_line,
     conceal = "",
-    virt_text = { { if_indent .. compressed, "Conceal" } }, -- same indent as if line
+    virt_text = { { if_indent .. " " .. compressed, "Conceal" } }, -- slight indent
     virt_text_pos = "overlay",
   })
 
@@ -206,7 +211,9 @@ function M.dim_regular_block(bufnr, block)
 
   if opts.conceal_dimmed then
     -- Use the working conceal_lines approach to eliminate visual space
-    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+    local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
+    local base_indent = first_line:match("^%s*") or ""
+    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. "    ")
   else
     -- Show the full block content but with dimmed highlighting
     for row = block.start_row, block.end_row do
@@ -234,7 +241,9 @@ function M.dim_inline_block(bufnr, block)
 
   if opts.conceal_dimmed then
     -- Use the working conceal_lines approach for inline block content including closing brace
-    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row)
+    local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
+    local if_indent = if_line:match("^%s*") or ""
+    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. "  ")
   else
     -- For inline blocks, only dim the content inside the {} block, not the if line
     for row = block.block_start_row + 1, block.block_end_row - 1 do
@@ -268,13 +277,16 @@ function M.conceal_inline_block(bufnr, block)
 end
 
 -- True line compression using folds - the only reliable way to compress lines
-function M.hide_error_block_advanced(bufnr, start_line, end_line)
+function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
   if start_line > end_line then
     return
   end
 
   -- Set up dimmed highlighting on first use
   M.setup_fold_highlighting()
+  
+  -- Configure fillchars to remove trailing dots from folds
+  vim.wo.fillchars = "fold: "
 
   -- Use manual folding to actually compress the lines
   local win = vim.fn.bufwinid(bufnr)
@@ -306,7 +318,7 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line)
 
   -- Get the indentation of the first line to preserve alignment
   local first_line_text = lines[1] or ""
-  local indent = first_line_text:match("^%s*") or ""
+  local indent = custom_indent or (first_line_text:match("^%s*") or "")
 
   -- Store fold text globally so it can be accessed
   if not _G.phantom_err_fold_texts then
@@ -332,7 +344,7 @@ function _G.phantom_err_get_fold_text()
   end
 
   -- Fallback to default fold text
-  return "⋯ error handling"
+  return "error handling"
 end
 
 -- Set up dimmed highlighting for fold text
@@ -385,7 +397,7 @@ function M.create_compressed_fold(bufnr, start_row, end_row)
 
   -- Set custom fold text
   vim.wo.foldtext =
-    string.format('v:lua.require("phantom-err.display").get_fold_text("%s")', indent .. "⋯ error handling")
+    string.format('v:lua.require("phantom-err.display").get_fold_text("%s")', indent .. "error handling")
 
   -- Restore original window
   vim.api.nvim_set_current_win(current_win)
