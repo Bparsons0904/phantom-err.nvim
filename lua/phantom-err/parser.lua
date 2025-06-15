@@ -3,12 +3,12 @@ local M = {}
 function M.find_error_blocks(bufnr)
   local parser = vim.treesitter.get_parser(bufnr, 'go')
   if not parser then
-    return {}
+    return {}, {}
   end
   
   local tree = parser:parse()[1]
   if not tree then
-    return {}
+    return {}, {}
   end
   
   local root = tree:root()
@@ -34,9 +34,28 @@ function M.find_error_blocks(bufnr)
       consequence: (block)
     ) @if_block_reverse
     (#eq? @err_var_reverse "err")
+    
+    ; Match error variable assignments (e.g., _, err := someFunc())
+    (assignment_statement
+      left: (expression_list
+        . (identifier)
+        . (identifier) @err_assign
+      )
+    ) @assign_block
+    (#eq? @err_assign "err")
+    
+    ; Match simple error assignments (e.g., err := someFunc())
+    (short_var_declaration
+      left: (expression_list
+        (identifier) @err_simple
+      )
+    ) @simple_assign_block
+    (#eq? @err_simple "err")
   ]])
   
   local error_blocks = {}
+  local error_assignments = {}
+  
   for id, node in query:iter_captures(root, bufnr, 0, -1) do
     local capture_name = query.captures[id]
     
@@ -49,10 +68,19 @@ function M.find_error_blocks(bufnr)
         end_col = end_col,
         node = node
       })
+    elseif capture_name == "assign_block" or capture_name == "simple_assign_block" then
+      local start_row, start_col, end_row, end_col = node:range()
+      table.insert(error_assignments, {
+        start_row = start_row,
+        start_col = start_col,
+        end_row = end_row,
+        end_col = end_col,
+        node = node
+      })
     end
   end
   
-  return error_blocks
+  return error_blocks, error_assignments
 end
 
 return M

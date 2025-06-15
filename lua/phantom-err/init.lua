@@ -31,6 +31,9 @@ function M.show()
 
   display.show_all(bufnr)
   state.set_enabled(bufnr, false)
+  
+  -- Clean up cursor movement autocmd
+  pcall(vim.api.nvim_del_augroup_by_name, "phantom_err_cursor_" .. bufnr)
 end
 
 function M.hide()
@@ -39,10 +42,22 @@ function M.hide()
     return
   end
 
-  local error_blocks = parser.find_error_blocks(bufnr)
+  local error_blocks, error_assignments = parser.find_error_blocks(bufnr)
   if #error_blocks > 0 then
-    display.hide_blocks(bufnr, error_blocks)
+    display.hide_blocks(bufnr, error_blocks, error_assignments)
     state.set_enabled(bufnr, true)
+    
+    -- Set up autocmd for cursor movement to update dimming
+    local group = vim.api.nvim_create_augroup("phantom_err_cursor_" .. bufnr, { clear = true })
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+      group = group,
+      buffer = bufnr,
+      callback = function()
+        if state.is_enabled(bufnr) then
+          display.hide_blocks(bufnr, error_blocks, error_assignments)
+        end
+      end,
+    })
   end
 end
 
