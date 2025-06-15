@@ -10,7 +10,9 @@ M.defaults = {
   },
   auto_reveal = {
     in_scope = false,
-    in_block = false
+    in_block = false,
+    keep_dimmed = false,  -- Keep blocks dimmed when cursor is in them instead of fully revealing
+    dim_mode = "comment"  -- "comment" | "conceal" | "normal" - how to dim revealed blocks
   },
   patterns = {
     basic = true,
