@@ -17,9 +17,9 @@ function M.toggle()
   end
 
   if state.is_enabled(bufnr) then
-    M.hide()
+    M.show()  -- If hiding is enabled, show the errors
   else
-    M.show()
+    M.hide()  -- If hiding is disabled, hide the errors
   end
 end
 
@@ -47,6 +47,9 @@ function M.hide()
     display.hide_blocks(bufnr, error_blocks, error_assignments)
     state.set_enabled(bufnr, true)
     
+    -- Cache the last cursor row to avoid unnecessary updates
+    local last_cursor_row = -1
+    
     -- Set up autocmd for cursor movement to update dimming
     local group = vim.api.nvim_create_augroup("phantom_err_cursor_" .. bufnr, { clear = true })
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
@@ -54,7 +57,12 @@ function M.hide()
       buffer = bufnr,
       callback = function()
         if state.is_enabled(bufnr) then
-          display.hide_blocks(bufnr, error_blocks, error_assignments)
+          local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1
+          -- Only update if cursor row actually changed
+          if cursor_row ~= last_cursor_row then
+            last_cursor_row = cursor_row
+            display.hide_blocks(bufnr, error_blocks, error_assignments)
+          end
         end
       end,
     })

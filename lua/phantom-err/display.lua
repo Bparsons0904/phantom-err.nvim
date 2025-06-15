@@ -12,10 +12,10 @@ function M.hide_blocks(bufnr, error_blocks, error_assignments)
     return
   end
 
-  M.clear_conceals(bufnr)
-  
-  -- Get current cursor position
+  -- Get current cursor position first to avoid unnecessary work
   local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1 -- Convert to 0-based
+  
+  M.clear_conceals(bufnr)
   
   -- Find the next error block after the current assignment (if cursor is in one)
   local next_error_block_for_assignment = nil
