@@ -3,7 +3,11 @@ if vim.g.loaded_phantom_err then
 end
 vim.g.loaded_phantom_err = 1
 
-local phantom_err = require('phantom-err')
+local ok, phantom_err = pcall(require, 'phantom-err')
+if not ok then
+  vim.notify('phantom-err: Failed to load module: ' .. phantom_err, vim.log.levels.ERROR)
+  return
+end
 
 vim.api.nvim_create_user_command('GoErrorToggle', function()
   phantom_err.toggle()

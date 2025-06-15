@@ -7,10 +7,16 @@ function M.hide_blocks(bufnr, error_blocks)
   
   for _, block in ipairs(error_blocks) do
     for row = block.start_row, block.end_row do
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = -1,
-        conceal = ""
-      })
+      local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line then
+        local line_length = #line
+        if line_length > 0 then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+            end_col = line_length,
+            conceal = ""
+          })
+        end
+      end
     end
   end
 end
