@@ -6,29 +6,20 @@ M.defaults = {
   -- Automatically enable phantom-err when opening Go files
   auto_enable = true,
 
-  -- How to display error blocks:
-  -- - "single_line": Compress error blocks into a single line with compressed syntax
-  -- - Any other value: Dim error blocks when cursor is not in them
-  mode = "single_line",
+  -- Use folding to completely hide error blocks (most aggressive compression)
+  fold_errors = true,
 
-  -- When dimming error blocks (non-single_line mode):
-  -- - true: Use folding to completely hide lines
-  -- - false: Just apply dimming highlight
-  conceal_dimmed = true,
+  -- Single-line compression mode when cursor is not in error blocks:
+  -- - "conceal": Compress to single line with overlay text
+  -- - "comment": Just dim with Comment highlight  
+  -- - "none": No compression (only folding if fold_errors is true)
+  single_line_mode = "conceal",
 
-  -- Cursor-based auto-reveal behavior
-  auto_reveal = {
-    -- When cursor enters an error block:
-    -- - false: Fully reveal the block (remove all dimming/concealing)
-    -- - true: Keep the block dimmed but visible
-    keep_dimmed = false,
-
-    -- How to dim blocks when keep_dimmed is true:
-    -- - "comment": Use Comment highlight group
-    -- - "conceal": Use Conceal highlight group
-    -- - "normal": No special highlighting (fully visible)
-    dim_mode = "normal",
-  },
+  -- How to display error blocks when cursor enters them:
+  -- - "normal": Fully reveal the block (disable dimming/concealing)
+  -- - "comment": Keep dimmed with Comment highlight
+  -- - "conceal": Keep dimmed with Conceal highlight
+  auto_reveal_mode = "normal",
 }
 
 M.options = {}
@@ -37,12 +28,16 @@ function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 
   -- Validate config
-  if
-    M.options.auto_reveal.dim_mode
-    and not vim.tbl_contains({ "comment", "conceal", "normal" }, M.options.auto_reveal.dim_mode)
-  then
-    vim.notify("phantom-err: Invalid dim_mode. Using 'comment'", vim.log.levels.WARN)
-    M.options.auto_reveal.dim_mode = "comment"
+  local valid_single_line_modes = { "conceal", "comment", "none" }
+  if not vim.tbl_contains(valid_single_line_modes, M.options.single_line_mode) then
+    vim.notify("phantom-err: Invalid single_line_mode. Using 'conceal'", vim.log.levels.WARN)
+    M.options.single_line_mode = "conceal"
+  end
+
+  local valid_auto_reveal_modes = { "normal", "comment", "conceal" }
+  if not vim.tbl_contains(valid_auto_reveal_modes, M.options.auto_reveal_mode) then
+    vim.notify("phantom-err: Invalid auto_reveal_mode. Using 'normal'", vim.log.levels.WARN)
+    M.options.auto_reveal_mode = "normal"
   end
 end
 

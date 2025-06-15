@@ -20,44 +20,9 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
 
   local opts = config.get()
 
-  if opts.mode == "single_line" then
-    M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
-    M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
-    return
-  end
-
-  -- Combine regular and inline blocks for the old dimming mode
-  local all_blocks = {}
-  for _, block in ipairs(regular_blocks) do
-    table.insert(all_blocks, block)
-  end
-  for _, block in ipairs(inline_blocks) do
-    table.insert(all_blocks, {
-      start_row = block.if_start_row,
-      end_row = block.if_end_row,
-    })
-  end
-
-  for _, block in ipairs(all_blocks) do
-    -- Check if cursor is within this block
-    local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
-
-    -- Don't dim if cursor is in the block
-    local should_dim = not is_cursor_in_block
-
-    for row = block.start_row, block.end_row do
-      -- Ensure row is valid
-      if type(row) == "number" and row >= 0 then
-        local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-        if line and #line > 0 and should_dim then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-            end_col = #line,
-            hl_group = "Conceal",
-          })
-        end
-      end
-    end
-  end
+  -- Always compress/conceal blocks - the mode determines how
+  M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
+  M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
 end
 
 function M.show_all(bufnr)
@@ -99,15 +64,26 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
 
     if not is_cursor_in_block then
-      if opts.conceal_dimmed then
+      -- Apply folding if enabled (takes priority)
+      if opts.fold_errors then
         M.conceal_regular_block(bufnr, block)
-      else
+      -- Otherwise apply single-line compression mode  
+      elseif opts.single_line_mode == "conceal" then
         M.compress_regular_block(bufnr, block)
+      elseif opts.single_line_mode == "comment" then
+        M.dim_regular_block(bufnr, block, "Comment")
+      -- "none" mode does nothing
       end
-    elseif opts.auto_reveal.keep_dimmed then
-      M.dim_regular_block(bufnr, block)
+    else
+      -- Apply auto-reveal mode when cursor is inside block
+      if opts.auto_reveal_mode == "normal" then
+        -- Do nothing - fully reveal the block
+      elseif opts.auto_reveal_mode == "comment" then
+        M.dim_regular_block(bufnr, block, "Comment")
+      elseif opts.auto_reveal_mode == "conceal" then
+        M.dim_regular_block(bufnr, block, "Conceal")
+      end
     end
-    -- If keep_dimmed is false, don't do anything (fully reveal the block)
   end
 end
 
@@ -121,15 +97,26 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
     local is_cursor_in_if = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
 
     if not is_cursor_in_if then
-      if opts.conceal_dimmed then
+      -- Apply folding if enabled (takes priority)
+      if opts.fold_errors then
         M.conceal_inline_block(bufnr, block)
-      else
+      -- Otherwise apply single-line compression mode
+      elseif opts.single_line_mode == "conceal" then
         M.compress_inline_block(bufnr, block)
+      elseif opts.single_line_mode == "comment" then
+        M.dim_inline_block(bufnr, block, "Comment")
+      -- "none" mode does nothing
       end
-    elseif opts.auto_reveal.keep_dimmed then
-      M.dim_inline_block(bufnr, block)
+    else
+      -- Apply auto-reveal mode when cursor is inside block
+      if opts.auto_reveal_mode == "normal" then
+        -- Do nothing - fully reveal the block
+      elseif opts.auto_reveal_mode == "comment" then
+        M.dim_inline_block(bufnr, block, "Comment")
+      elseif opts.auto_reveal_mode == "conceal" then
+        M.dim_inline_block(bufnr, block, "Conceal")
+      end
     end
-    -- If keep_dimmed is false, don't do anything (fully reveal the block)
   end
 end
 
@@ -200,62 +187,28 @@ function M.compress_inline_block(bufnr, block)
   end
 end
 
-function M.dim_regular_block(bufnr, block)
-  local opts = config.get()
-
-  if opts.conceal_dimmed then
-    -- Use the working conceal_lines approach to eliminate visual space
-    local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
-    local base_indent = first_line:match("^%s*") or ""
-    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
-  else
-    -- Show the full block content but with dimmed highlighting
-    for row = block.start_row, block.end_row do
-      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-      if line_text and #line_text > 0 then
-        if opts.auto_reveal.dim_mode == "comment" then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-            end_col = #line_text,
-            hl_group = "Comment",
-          })
-        elseif opts.auto_reveal.dim_mode == "conceal" then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-            end_col = #line_text,
-            hl_group = "Conceal",
-          })
-        end
-        -- For "normal" mode, don't apply any highlighting (fully reveal)
-      end
+function M.dim_regular_block(bufnr, block, hl_group)
+  -- Show the full block content but with dimmed highlighting
+  for row = block.start_row, block.end_row do
+    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+    if line_text and #line_text > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+        end_col = #line_text,
+        hl_group = hl_group,
+      })
     end
   end
 end
 
-function M.dim_inline_block(bufnr, block)
-  local opts = config.get()
-
-  if opts.conceal_dimmed then
-    -- Use the working conceal_lines approach for inline block content including closing brace
-    local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
-    local if_indent = if_line:match("^%s*") or ""
-    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
-  else
-    -- For inline blocks, only dim the content inside the {} block, not the if line
-    for row = block.block_start_row + 1, block.block_end_row - 1 do
-      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-      if line_text and #line_text > 0 then
-        if opts.auto_reveal.dim_mode == "comment" then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-            end_col = #line_text,
-            hl_group = "Comment",
-          })
-        elseif opts.auto_reveal.dim_mode == "conceal" then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-            end_col = #line_text,
-            hl_group = "Conceal",
-          })
-        end
-        -- For "normal" mode, don't apply any highlighting (fully reveal)
-      end
+function M.dim_inline_block(bufnr, block, hl_group)
+  -- For inline blocks, only dim the content inside the {} block, not the if line
+  for row = block.block_start_row + 1, block.block_end_row - 1 do
+    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+    if line_text and #line_text > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+        end_col = #line_text,
+        hl_group = hl_group,
+      })
     end
   end
 end

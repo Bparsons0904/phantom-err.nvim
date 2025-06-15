@@ -26,9 +26,21 @@ function M.setup(opts)
   end
 end
 
-function M.set_mode(mode)
+function M.set_fold_errors(enabled)
   local opts = config.get()
-  opts.mode = mode
+  opts.fold_errors = enabled
+  config.options = opts
+end
+
+function M.set_single_line_mode(mode)
+  local opts = config.get()
+  opts.single_line_mode = mode
+  config.options = opts
+end
+
+function M.set_auto_reveal_mode(mode)
+  local opts = config.get()
+  opts.auto_reveal_mode = mode
   config.options = opts
 end
 
