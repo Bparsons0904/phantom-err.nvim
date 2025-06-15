@@ -1,0 +1,1 @@
+# phantom-err.nvim
