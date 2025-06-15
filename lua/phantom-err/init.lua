@@ -70,9 +70,9 @@ function M.hide()
 end
 
 function M.update_buffer_blocks(bufnr)
-  local error_blocks, error_assignments = parser.find_error_blocks(bufnr)
-  if #error_blocks > 0 then
-    display.hide_blocks(bufnr, error_blocks, error_assignments)
+  local regular_blocks, inline_blocks, error_assignments = parser.find_error_blocks(bufnr)
+  if #regular_blocks > 0 or #inline_blocks > 0 then
+    display.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
     state.set_enabled(bufnr, true)
     
     -- Cache the last cursor row to avoid unnecessary updates
@@ -90,8 +90,8 @@ function M.update_buffer_blocks(bufnr)
           if cursor_row ~= last_cursor_row then
             last_cursor_row = cursor_row
             -- Re-parse on cursor move to get current blocks
-            local current_blocks, current_assignments = parser.find_error_blocks(bufnr)
-            display.hide_blocks(bufnr, current_blocks, current_assignments)
+            local current_regular, current_inline, current_assignments = parser.find_error_blocks(bufnr)
+            display.hide_blocks(bufnr, current_regular, current_inline, current_assignments)
           end
         end
       end,

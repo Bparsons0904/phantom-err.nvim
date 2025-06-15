@@ -3,12 +3,12 @@ local M = {}
 function M.find_error_blocks(bufnr)
   local parser = vim.treesitter.get_parser(bufnr, 'go')
   if not parser then
-    return {}, {}
+    return {}, {}, {}
   end
   
   local tree = parser:parse()[1]
   if not tree then
-    return {}, {}
+    return {}, {}, {}
   end
   
   local root = tree:root()
@@ -53,7 +53,8 @@ function M.find_error_blocks(bufnr)
     (#eq? @err_simple "err")
   ]])
   
-  local error_blocks = {}
+  local regular_blocks = {}
+  local inline_blocks = {}
   local error_assignments = {}
   
   for id, node in query:iter_captures(root, bufnr, 0, -1) do
@@ -67,31 +68,31 @@ function M.find_error_blocks(bufnr)
       local is_inline = first_line:match("if.*:=.*;.*err%s*!=%s*nil") ~= nil
       
       if is_inline then
-        -- For inline patterns, we want to compress only the block content
-        -- Find the consequence block (the { } part)
+        -- For inline patterns, store both the full if statement and the block content
         for child in node:iter_children() do
           if child:type() == "block" then
             local block_start_row, block_start_col, block_end_row, block_end_col = child:range()
-            table.insert(error_blocks, {
-              start_row = block_start_row,
-              start_col = block_start_col,
-              end_row = block_end_row,
-              end_col = block_end_col,
-              node = child,
-              is_inline_block_only = true
+            table.insert(inline_blocks, {
+              if_start_row = start_row,
+              if_end_row = end_row,
+              block_start_row = block_start_row,
+              block_start_col = block_start_col,
+              block_end_row = block_end_row,
+              block_end_col = block_end_col,
+              if_node = node,
+              block_node = child
             })
             break
           end
         end
       else
         -- Regular patterns compress the entire if statement
-        table.insert(error_blocks, {
+        table.insert(regular_blocks, {
           start_row = start_row,
           start_col = start_col,
           end_row = end_row,
           end_col = end_col,
-          node = node,
-          is_inline = false
+          node = node
         })
       end
     elseif capture_name == "assign_block" or capture_name == "simple_assign_block" then
@@ -106,7 +107,7 @@ function M.find_error_blocks(bufnr)
     end
   end
   
-  return error_blocks, error_assignments
+  return regular_blocks, inline_blocks, error_assignments
 end
 
 return M
