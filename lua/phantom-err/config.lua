@@ -6,18 +6,19 @@ M.defaults = {
   mode = "single_line", -- "marker" | "single_line" | "conceal"
   marker = {
     symbol = "⚠",
-    hl_group = "Comment"
+    hl_group = "Comment",
   },
   auto_reveal = {
     in_scope = false,
     in_block = false,
-    keep_dimmed = false,  -- Keep blocks dimmed when cursor is in them instead of fully revealing
-    dim_mode = "comment"  -- "comment" | "conceal" | "normal" - how to dim revealed blocks
+    keep_dimmed = false, -- Keep blocks dimmed when cursor is in them instead of fully revealing
+    dim_mode = "comment", -- "comment" | "conceal" | "normal" - how to dim revealed blocks
   },
   patterns = {
     basic = true,
-    inline = false
-  }
+    inline = false,
+  },
+  conceal_dimmed = true, -- Use concealing to completely hide dimmed lines (requires conceallevel > 0)
 }
 
 M.options = {}

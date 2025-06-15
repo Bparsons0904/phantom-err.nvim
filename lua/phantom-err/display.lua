@@ -20,6 +20,7 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
   M.clear_conceals(bufnr)
   
   local opts = config.get()
+  
   if opts.mode == "single_line" then
     M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
     M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
@@ -66,6 +67,27 @@ end
 
 function M.clear_conceals(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
+  
+  -- Also clear any folds we created
+  local win = vim.fn.bufwinid(bufnr)
+  if win ~= -1 then
+    local current_win = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(win)
+    
+    -- Clear all folds
+    vim.cmd('silent! normal! zE')
+    
+    vim.api.nvim_set_current_win(current_win)
+  end
+  
+  -- Clear stored fold texts
+  if _G.phantom_err_fold_texts then
+    for key, _ in pairs(_G.phantom_err_fold_texts) do
+      if key:match('^' .. bufnr .. '_') then
+        _G.phantom_err_fold_texts[key] = nil
+      end
+    end
+  end
 end
 
 function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
@@ -78,7 +100,11 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
     
     if not is_cursor_in_block then
-      M.compress_regular_block(bufnr, block)
+      if opts.conceal_dimmed then
+        M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+      else
+        M.compress_regular_block(bufnr, block)
+      end
     elseif opts.auto_reveal.keep_dimmed then
       M.dim_regular_block(bufnr, block)
     end
@@ -96,7 +122,11 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
     local is_cursor_in_if = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
     
     if not is_cursor_in_if then
-      M.compress_inline_block(bufnr, block)
+      if opts.conceal_dimmed then
+        M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row - 1)
+      else
+        M.compress_inline_block(bufnr, block)
+      end
     elseif opts.auto_reveal.keep_dimmed then
       M.dim_inline_block(bufnr, block)
     end
@@ -169,22 +199,27 @@ end
 function M.dim_regular_block(bufnr, block)
   local opts = config.get()
   
-  -- Show the full block content but with dimmed highlighting
-  for row = block.start_row, block.end_row do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      if opts.auto_reveal.dim_mode == "comment" then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-          end_col = #line_text,
-          hl_group = "Comment"
-        })
-      elseif opts.auto_reveal.dim_mode == "conceal" then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-          end_col = #line_text,
-          hl_group = "Conceal"
-        })
+  if opts.conceal_dimmed then
+    -- Use the working conceal_lines approach to eliminate visual space
+    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+  else
+    -- Show the full block content but with dimmed highlighting
+    for row = block.start_row, block.end_row do
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        if opts.auto_reveal.dim_mode == "comment" then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+            end_col = #line_text,
+            hl_group = "Comment"
+          })
+        elseif opts.auto_reveal.dim_mode == "conceal" then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+            end_col = #line_text,
+            hl_group = "Conceal"
+          })
+        end
+        -- For "normal" mode, don't apply any highlighting (fully reveal)
       end
-      -- For "normal" mode, don't apply any highlighting (fully reveal)
     end
   end
 end
@@ -192,22 +227,331 @@ end
 function M.dim_inline_block(bufnr, block)
   local opts = config.get()
   
-  -- For inline blocks, only dim the content inside the {} block, not the if line
-  for row = block.block_start_row + 1, block.block_end_row - 1 do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      if opts.auto_reveal.dim_mode == "comment" then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-          end_col = #line_text,
-          hl_group = "Comment"
-        })
-      elseif opts.auto_reveal.dim_mode == "conceal" then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-          end_col = #line_text,
-          hl_group = "Conceal"
-        })
+  if opts.conceal_dimmed then
+    -- Use the working conceal_lines approach for inline block content
+    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row - 1)
+  else
+    -- For inline blocks, only dim the content inside the {} block, not the if line
+    for row = block.block_start_row + 1, block.block_end_row - 1 do
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        if opts.auto_reveal.dim_mode == "comment" then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+            end_col = #line_text,
+            hl_group = "Comment"
+          })
+        elseif opts.auto_reveal.dim_mode == "conceal" then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+            end_col = #line_text,
+            hl_group = "Conceal"
+          })
+        end
+        -- For "normal" mode, don't apply any highlighting (fully reveal)
       end
-      -- For "normal" mode, don't apply any highlighting (fully reveal)
+    end
+  end
+end
+
+function M.conceal_regular_block(bufnr, block)
+  -- Use the proper conceal_lines technique from advanced guide
+  M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+end
+
+function M.conceal_inline_block(bufnr, block)
+  -- For inline blocks, only conceal the content inside the {} block, not the if line
+  M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row - 1)
+end
+
+-- True line compression using folds - the only reliable way to compress lines
+function M.hide_error_block_advanced(bufnr, start_line, end_line)
+  if start_line > end_line then
+    return
+  end
+
+  -- Use manual folding to actually compress the lines
+  local win = vim.fn.bufwinid(bufnr)
+  if win == -1 then
+    return
+  end
+  
+  -- Switch to the buffer window temporarily
+  local current_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_current_win(win)
+  
+  -- Set up manual folding if not already set
+  if vim.wo.foldmethod ~= 'manual' then
+    vim.wo.foldmethod = 'manual'
+  end
+  
+  -- Convert to 1-based line numbers for vim commands
+  local fold_start = start_line + 1
+  local fold_end = end_line + 1
+  
+  -- Create and close the fold
+  vim.cmd(string.format('silent! %d,%dfold', fold_start, fold_end))
+  vim.cmd(string.format('silent! %dfoldclose', fold_start))
+  
+  -- Set custom fold text
+  local line_count = end_line - start_line + 1
+  local first_line_text = vim.api.nvim_buf_get_lines(bufnr, start_line, start_line + 1, false)[1] or ""
+  local indent = first_line_text:match("^%s*") or ""
+  
+  -- Store fold text globally so it can be accessed
+  if not _G.phantom_err_fold_texts then
+    _G.phantom_err_fold_texts = {}
+  end
+  _G.phantom_err_fold_texts[bufnr .. '_' .. start_line] = indent .. "⋯ error handling (" .. line_count .. " lines)"
+  
+  -- Set window-local foldtext function
+  vim.wo.foldtext = 'v:lua.phantom_err_get_fold_text()'
+  
+  -- Restore original window
+  vim.api.nvim_set_current_win(current_win)
+end
+
+-- Global function to get fold text
+function _G.phantom_err_get_fold_text()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local line = vim.v.foldstart - 1  -- Convert to 0-based
+  local key = bufnr .. '_' .. line
+  
+  if _G.phantom_err_fold_texts and _G.phantom_err_fold_texts[key] then
+    return _G.phantom_err_fold_texts[key]
+  end
+  
+  -- Fallback to default fold text
+  return "⋯ error handling"
+end
+
+function M.hide_lines_with_virtual_text(bufnr, start_row, end_row)
+  -- True line compression: use programmatic folding to actually collapse lines
+  M.create_compressed_fold(bufnr, start_row, end_row)
+end
+
+function M.create_compressed_fold(bufnr, start_row, end_row)
+  -- Create a manual fold to compress the lines
+  local win = vim.fn.bufwinid(bufnr)
+  if win == -1 then return end
+  
+  -- Save current window and switch to target buffer window
+  local current_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_current_win(win)
+  
+  -- Enable manual folding
+  local original_foldmethod = vim.wo.foldmethod
+  vim.wo.foldmethod = 'manual'
+  
+  -- Create fold for the error block
+  -- Convert to 1-based indexing for vim commands
+  local fold_start = start_row + 1
+  local fold_end = end_row + 1
+  
+  -- Execute fold creation
+  vim.cmd(string.format('%d,%dfold', fold_start, fold_end))
+  
+  -- Close the fold to compress it
+  vim.cmd(string.format('%dfoldclose', fold_start))
+  
+  -- Customize fold text to show minimal indicator
+  local first_line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
+  local indent = first_line:match("^%s*") or ""
+  
+  -- Set custom fold text
+  vim.wo.foldtext = string.format('v:lua.require("phantom-err.display").get_fold_text("%s")', indent .. "⋯ error handling")
+  
+  -- Restore original window
+  vim.api.nvim_set_current_win(current_win)
+end
+
+function M.get_fold_text(text)
+  return text
+end
+
+-- Test function for line compression using folds
+function M.test_line_compression(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  
+  print("=== TESTING LINE COMPRESSION ===")
+  
+  -- Find an error block and compress it
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, line in ipairs(lines) do
+    if line:find("if err != nil") then
+      print("Found error block starting at line " .. row)
+      
+      -- Find the end of the block (look for closing brace or return)
+      local end_row = row
+      for i = row + 1, #lines do
+        if lines[i]:find("^%s*}") or lines[i]:find("return") then
+          end_row = i
+          break
+        end
+      end
+      
+      print("Compressing lines " .. row .. " to " .. end_row)
+      M.create_compressed_fold(bufnr, row - 1, end_row - 1) -- Convert to 0-based
+      print("Lines should now be compressed into a single fold")
+      break
+    end
+  end
+end
+
+-- Test the advanced conceal_lines approach from the guide
+function M.test_advanced_concealing(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  
+  print("=== TESTING ADVANCED CONCEAL_LINES ===")
+  
+  -- Clear existing conceals
+  M.clear_conceals(bufnr)
+  
+  -- Find an error block and use advanced concealing
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, line in ipairs(lines) do
+    if line:find("if err != nil") then
+      print("Found error block starting at line " .. row)
+      
+      -- Find the end of the block
+      local end_row = row
+      for i = row + 1, #lines do
+        if lines[i]:find("^%s*}") or lines[i]:find("return") then
+          end_row = i
+          break
+        end
+      end
+      
+      print("Using advanced concealing on lines " .. row .. " to " .. end_row)
+      M.hide_error_block_advanced(bufnr, row - 1, end_row - 1) -- Convert to 0-based
+      print("Lines should now be completely eliminated with conceal_lines")
+      break
+    end
+  end
+end
+
+-- Simple proof of concept function to test concealing
+function M.test_concealing(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  
+  -- Create debug output that won't disappear
+  local debug_lines = {}
+  local function debug_print(msg)
+    table.insert(debug_lines, msg)
+    print(msg)
+  end
+  
+  debug_print("=== CONCEALING DEBUG ===")
+  debug_print("Buffer: " .. bufnr)
+  
+  -- Check current settings
+  debug_print("Current conceallevel: " .. vim.wo.conceallevel)
+  debug_print("Current concealcursor: " .. vim.wo.concealcursor)
+  
+  -- Set conceallevel to enable concealing
+  vim.wo.conceallevel = 2
+  vim.wo.concealcursor = 'nv'
+  
+  debug_print("After setting - conceallevel: " .. vim.wo.conceallevel)
+  debug_print("After setting - concealcursor: " .. vim.wo.concealcursor)
+  
+  -- Clear any existing conceals first
+  M.clear_conceals(bufnr)
+  
+  -- Find the first occurrence of "err" and try to conceal it
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, line in ipairs(lines) do
+    local start_col = line:find("err")
+    if start_col then
+      debug_print("Found 'err' at line " .. row .. ", col " .. start_col)
+      debug_print("Line content: " .. line)
+      
+      -- Try to conceal just the word "err" with a dot
+      -- Use very high priority to override syntax highlighting
+      local mark_id = vim.api.nvim_buf_set_extmark(bufnr, namespace, row - 1, start_col - 1, {
+        end_col = start_col + 2, -- "err" is 3 characters
+        conceal = "•",
+        priority = 4096,  -- Very high priority
+        hl_mode = "replace"  -- Replace existing highlighting
+      })
+      
+      debug_print("Created extmark with ID: " .. mark_id)
+      
+      -- Verify the extmark was created
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {details = true})
+      debug_print("Total extmarks in namespace: " .. #marks)
+      for i, mark in ipairs(marks) do
+        debug_print("Mark " .. i .. ": " .. vim.inspect(mark))
+      end
+      
+      break
+    end
+  end
+  
+  debug_print("=== END DEBUG ===")
+  
+  -- Write debug output to a temporary file
+  local debug_file = "/tmp/phantom_err_debug.txt"
+  local file = io.open(debug_file, "w")
+  if file then
+    for _, line in ipairs(debug_lines) do
+      file:write(line .. "\n")
+    end
+    file:close()
+    print("Debug output written to: " .. debug_file)
+    vim.notify("Debug output saved to " .. debug_file, vim.log.levels.INFO)
+  end
+  
+  -- Move cursor away from concealed text to make concealing visible
+  local current_pos = vim.api.nvim_win_get_cursor(0)
+  debug_print("Current cursor position: " .. vim.inspect(current_pos))
+  
+  -- Move cursor to first line to avoid being on concealed text
+  vim.api.nvim_win_set_cursor(0, {1, 0})
+  debug_print("Moved cursor to line 1. Check if 'err' on line 10 is now concealed with '•'")
+  vim.notify("Cursor moved to line 1. Check line 10 for concealed 'err' -> '•'", vim.log.levels.INFO)
+end
+
+-- Test concealing without syntax highlighting interference
+function M.test_conceal_no_syntax(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  
+  print("=== TESTING WITHOUT SYNTAX ===")
+  
+  -- Save current syntax setting
+  local original_syntax = vim.bo[bufnr].syntax
+  print("Original syntax:", original_syntax)
+  
+  -- Temporarily disable syntax highlighting
+  vim.bo[bufnr].syntax = ""
+  
+  -- Set concealing options
+  vim.wo.conceallevel = 2
+  vim.wo.concealcursor = 'nv'
+  
+  -- Clear existing marks
+  M.clear_conceals(bufnr)
+  
+  -- Find and conceal "err"
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, line in ipairs(lines) do
+    local start_col = line:find("err")
+    if start_col then
+      print("Concealing 'err' at line " .. row .. " without syntax highlighting")
+      
+      local mark_id = vim.api.nvim_buf_set_extmark(bufnr, namespace, row - 1, start_col - 1, {
+        end_col = start_col + 2,
+        conceal = "•",
+        priority = 200
+      })
+      
+      print("Created extmark ID:", mark_id)
+      print("Now check if 'err' is concealed with '•'")
+      print("Press any key to restore syntax highlighting...")
+      
+      -- Wait for user input then restore
+      vim.fn.getchar()
+      vim.bo[bufnr].syntax = original_syntax
+      print("Syntax restored to:", original_syntax)
+      break
     end
   end
 end

@@ -118,5 +118,25 @@ function M.update_buffer_blocks(bufnr)
   end
 end
 
+-- Simple test function to verify concealing works
+function M.test_conceal()
+  display.test_concealing()
+end
+
+-- Test concealing without syntax highlighting interference
+function M.test_conceal_no_syntax()
+  display.test_conceal_no_syntax()
+end
+
+-- Test line compression using folds
+function M.test_line_compression()
+  display.test_line_compression()
+end
+
+-- Test advanced conceal_lines approach from the guide
+function M.test_advanced_concealing()
+  display.test_advanced_concealing()
+end
+
 return M
 
