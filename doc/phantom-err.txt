@@ -1,0 +1,86 @@
+*phantom-err.txt*	Go error handling visibility for Neovim
+
+PHANTOM-ERR                                                   *phantom-err*
+
+A Neovim plugin that improves Go code readability by providing configurable
+visual folding of `if err != nil {}` error handling blocks.
+
+==============================================================================
+CONTENTS                                              *phantom-err-contents*
+
+    1. Introduction ...................... |phantom-err-introduction|
+    2. Installation ...................... |phantom-err-installation|
+    3. Configuration ..................... |phantom-err-configuration|
+    4. Commands .......................... |phantom-err-commands|
+    5. API ............................... |phantom-err-api|
+
+==============================================================================
+INTRODUCTION                                      *phantom-err-introduction*
+
+phantom-err.nvim provides visual folding of Go error handling blocks while
+keeping the buffer content unchanged for compatibility with Go tooling.
+
+==============================================================================
+INSTALLATION                                      *phantom-err-installation*
+
+Using lazy.nvim: >
+    {
+      'bparsons0904/phantom-err.nvim',
+      ft = 'go',
+      config = function()
+        require('phantom-err').setup()
+      end
+    }
+<
+
+==============================================================================
+CONFIGURATION                                    *phantom-err-configuration*
+
+Setup function: >
+    require('phantom-err').setup({
+      enabled = true,
+      mode = "conceal", -- "marker" | "single_line" | "conceal"
+      marker = {
+        symbol = "⚠",
+        hl_group = "Comment"
+      },
+      auto_reveal = {
+        in_scope = false,
+        in_block = false
+      },
+      patterns = {
+        basic = true,
+        inline = false
+      }
+    })
+<
+
+==============================================================================
+COMMANDS                                              *phantom-err-commands*
+
+:GoErrorToggle                                            *:GoErrorToggle*
+    Toggle Go error handling visibility
+
+:GoErrorShow                                                *:GoErrorShow*
+    Show all Go error handling blocks
+
+:GoErrorHide                                                *:GoErrorHide*
+    Hide all Go error handling blocks
+
+==============================================================================
+API                                                        *phantom-err-api*
+
+require('phantom-err').setup({opts})                    *phantom-err.setup()*
+    Setup the plugin with configuration options
+
+require('phantom-err').toggle()                         *phantom-err.toggle()*
+    Toggle error block visibility
+
+require('phantom-err').show()                             *phantom-err.show()*
+    Show all error blocks
+
+require('phantom-err').hide()                             *phantom-err.hide()*
+    Hide all error blocks
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
