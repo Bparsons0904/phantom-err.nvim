@@ -7,19 +7,19 @@ M.defaults = {
   auto_enable = true,
 
   -- Use folding to completely hide error blocks (most aggressive compression)
-  fold_errors = true,
+  fold_errors = false,
 
   -- Single-line compression mode when cursor is not in error blocks:
   -- - "conceal": Compress to single line with overlay text
-  -- - "comment": Just dim with Comment highlight  
+  -- - "comment": Just dim with Comment highlight
   -- - "none": No compression (only folding if fold_errors is true)
-  single_line_mode = "conceal",
+  single_line_mode = "none",
 
   -- How to display error blocks when cursor enters them:
   -- - "normal": Fully reveal the block (disable dimming/concealing)
   -- - "comment": Keep dimmed with Comment highlight
   -- - "conceal": Keep dimmed with Conceal highlight
-  auto_reveal_mode = "normal",
+  auto_reveal_mode = "conceal",
 }
 
 M.options = {}
