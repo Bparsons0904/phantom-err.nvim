@@ -2,7 +2,8 @@ local M = {}
 
 M.defaults = {
   enabled = true,
-  mode = "conceal", -- "marker" | "single_line" | "conceal"
+  auto_enable = true, -- Automatically enable phantom-err on Go files
+  mode = "single_line", -- "marker" | "single_line" | "conceal"
   marker = {
     symbol = "⚠",
     hl_group = "Comment"

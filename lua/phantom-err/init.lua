@@ -7,6 +7,29 @@ local state = require("phantom-err.state")
 
 function M.setup(opts)
   config.setup(opts)
+  
+  local options = config.get()
+  if options.auto_enable then
+    -- Set up autocmd to automatically enable on Go files
+    vim.api.nvim_create_autocmd("FileType", {
+      pattern = "go",
+      callback = function()
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.defer_fn(function()
+          if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "go" then
+            M.hide()
+          end
+        end, 100) -- Small delay to ensure file is fully loaded
+      end,
+      group = vim.api.nvim_create_augroup("phantom_err_auto_enable", { clear = true })
+    })
+  end
+end
+
+function M.set_mode(mode)
+  local opts = config.get()
+  opts.mode = mode
+  config.options = opts
 end
 
 function M.toggle()
