@@ -100,10 +100,7 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
 
     if not is_cursor_in_block then
       if opts.conceal_dimmed then
-        -- Get proper indentation for regular blocks (content level)
-        local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
-        local base_indent = first_line:match("^%s*") or ""
-        M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
+        M.conceal_regular_block(bufnr, block)
       else
         M.compress_regular_block(bufnr, block)
       end
@@ -125,10 +122,7 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
 
     if not is_cursor_in_if then
       if opts.conceal_dimmed then
-        -- Include the closing brace for inline blocks
-        local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
-        local if_indent = if_line:match("^%s*") or ""
-        M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
+        M.conceal_inline_block(bufnr, block)
       else
         M.compress_inline_block(bufnr, block)
       end
@@ -152,7 +146,7 @@ function M.compress_regular_block(bufnr, block)
   vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
     end_col = #first_line_text,
     conceal = "",
-    virt_text = { { indent .. " " .. compressed, "Conceal" } },
+    virt_text = { { indent .. compressed, "Conceal" } },
     virt_text_pos = "overlay",
   })
 
@@ -189,7 +183,7 @@ function M.compress_inline_block(bufnr, block)
   vim.api.nvim_buf_set_extmark(bufnr, namespace, block.block_start_row + 1, 0, {
     end_col = #first_content_line,
     conceal = "",
-    virt_text = { { if_indent .. " " .. compressed, "Conceal" } }, -- slight indent
+    virt_text = { { if_indent .. compressed, "Conceal" } }, -- slight indent
     virt_text_pos = "overlay",
   })
 
@@ -213,7 +207,7 @@ function M.dim_regular_block(bufnr, block)
     -- Use the working conceal_lines approach to eliminate visual space
     local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
     local base_indent = first_line:match("^%s*") or ""
-    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. "    ")
+    M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
   else
     -- Show the full block content but with dimmed highlighting
     for row = block.start_row, block.end_row do
@@ -243,7 +237,7 @@ function M.dim_inline_block(bufnr, block)
     -- Use the working conceal_lines approach for inline block content including closing brace
     local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
     local if_indent = if_line:match("^%s*") or ""
-    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. "  ")
+    M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
   else
     -- For inline blocks, only dim the content inside the {} block, not the if line
     for row = block.block_start_row + 1, block.block_end_row - 1 do
@@ -268,12 +262,16 @@ end
 
 function M.conceal_regular_block(bufnr, block)
   -- Use the proper conceal_lines technique from advanced guide
-  M.hide_error_block_advanced(bufnr, block.start_row, block.end_row)
+  local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
+  local base_indent = first_line:match("^%s*") or ""
+  M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
 end
 
 function M.conceal_inline_block(bufnr, block)
   -- For inline blocks, conceal content including the closing brace
-  M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row)
+  local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
+  local if_indent = if_line:match("^%s*") or ""  
+  M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
 end
 
 -- True line compression using folds - the only reliable way to compress lines
