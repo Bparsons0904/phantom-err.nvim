@@ -55,8 +55,9 @@ function M.show()
   display.show_all(bufnr)
   state.set_enabled(bufnr, false)
   
-  -- Clean up cursor movement autocmd
+  -- Clean up autocmds
   pcall(vim.api.nvim_del_augroup_by_name, "phantom_err_cursor_" .. bufnr)
+  pcall(vim.api.nvim_del_augroup_by_name, "phantom_err_changes_" .. bufnr)
 end
 
 function M.hide()
@@ -65,6 +66,10 @@ function M.hide()
     return
   end
 
+  M.update_buffer_blocks(bufnr)
+end
+
+function M.update_buffer_blocks(bufnr)
   local error_blocks, error_assignments = parser.find_error_blocks(bufnr)
   if #error_blocks > 0 then
     display.hide_blocks(bufnr, error_blocks, error_assignments)
@@ -74,9 +79,9 @@ function M.hide()
     local last_cursor_row = -1
     
     -- Set up autocmd for cursor movement to update dimming
-    local group = vim.api.nvim_create_augroup("phantom_err_cursor_" .. bufnr, { clear = true })
+    local cursor_group = vim.api.nvim_create_augroup("phantom_err_cursor_" .. bufnr, { clear = true })
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-      group = group,
+      group = cursor_group,
       buffer = bufnr,
       callback = function()
         if state.is_enabled(bufnr) then
@@ -84,11 +89,32 @@ function M.hide()
           -- Only update if cursor row actually changed
           if cursor_row ~= last_cursor_row then
             last_cursor_row = cursor_row
-            display.hide_blocks(bufnr, error_blocks, error_assignments)
+            -- Re-parse on cursor move to get current blocks
+            local current_blocks, current_assignments = parser.find_error_blocks(bufnr)
+            display.hide_blocks(bufnr, current_blocks, current_assignments)
           end
         end
       end,
     })
+    
+    -- Set up autocmd for buffer changes to re-parse and update
+    local change_group = vim.api.nvim_create_augroup("phantom_err_changes_" .. bufnr, { clear = true })
+    vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+      group = change_group,
+      buffer = bufnr,
+      callback = function()
+        if state.is_enabled(bufnr) then
+          -- Debounce the update to avoid excessive re-parsing
+          vim.defer_fn(function()
+            if vim.api.nvim_buf_is_valid(bufnr) and state.is_enabled(bufnr) then
+              M.update_buffer_blocks(bufnr)
+            end
+          end, 200) -- 200ms delay
+        end
+      end,
+    })
+  else
+    state.set_enabled(bufnr, false)
   end
 end
 

@@ -120,32 +120,62 @@ function M.compress_blocks(bufnr, error_blocks, error_assignments, cursor_row)
 end
 
 function M.compress_single_block(bufnr, block)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
-  local compressed = M.compress_lines(lines)
-  
-  -- Get the indentation of the first line to preserve alignment
-  local first_line = lines[1] or ""
-  local indent = first_line:match("^%s*") or ""
-  
-  -- Conceal the first line and show compressed version
-  local first_line_text = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1]
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
-    end_col = #first_line_text,
-    conceal = "",
-    virt_text = {{ indent .. compressed, "Conceal" }},
-    virt_text_pos = "overlay"
-  })
-  
-  -- Make the remaining lines invisible by concealing them with no replacement
-  for row = block.start_row + 1, block.end_row do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      -- Conceal the entire line content
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = #line_text,
-        conceal = "",
-        hl_group = "Ignore"  -- Make line invisible
-      })
+  if block.is_inline_block_only then
+    -- For inline patterns, only compress the block content (lines inside {})
+    -- Skip the first line which contains the if statement with function call
+    local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row + 1, block.end_row, false)
+    local compressed = M.compress_lines(lines)
+    
+    -- Get the indentation to match the opening brace
+    local brace_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
+    local indent = brace_line:match("^%s*") or ""
+    
+    -- Add the compressed content after the opening brace
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, #brace_line, {
+      virt_text = {{ " " .. compressed .. " }", "Conceal" }},
+      virt_text_pos = "eol"
+    })
+    
+    -- Hide the block content lines (but not the if line)
+    for row = block.start_row + 1, block.end_row do
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          conceal = "",
+          hl_group = "Ignore"
+        })
+      end
+    end
+  else
+    -- Regular block compression (existing logic)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
+    local compressed = M.compress_lines(lines)
+    
+    -- Get the indentation of the first line to preserve alignment
+    local first_line = lines[1] or ""
+    local indent = first_line:match("^%s*") or ""
+    
+    -- Conceal the first line and show compressed version
+    local first_line_text = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1]
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
+      end_col = #first_line_text,
+      conceal = "",
+      virt_text = {{ indent .. compressed, "Conceal" }},
+      virt_text_pos = "overlay"
+    })
+    
+    -- Make the remaining lines invisible by concealing them with no replacement
+    for row = block.start_row + 1, block.end_row do
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        -- Conceal the entire line content
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          conceal = "",
+          hl_group = "Ignore"  -- Make line invisible
+        })
+      end
     end
   end
 end

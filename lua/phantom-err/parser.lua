@@ -13,7 +13,7 @@ function M.find_error_blocks(bufnr)
   
   local root = tree:root()
   local query = vim.treesitter.query.parse('go', [[
-    ; Match `if err != nil` pattern
+    ; Match `if err != nil` pattern (regular)
     (if_statement
       condition: (binary_expression
         left: (identifier) @err_var
@@ -61,13 +61,39 @@ function M.find_error_blocks(bufnr)
     
     if capture_name == "if_block" or capture_name == "if_block_reverse" then
       local start_row, start_col, end_row, end_col = node:range()
-      table.insert(error_blocks, {
-        start_row = start_row,
-        start_col = start_col,
-        end_row = end_row,
-        end_col = end_col,
-        node = node
-      })
+      
+      -- Check if this is an inline pattern by examining the first line
+      local first_line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
+      local is_inline = first_line:match("if.*:=.*;.*err%s*!=%s*nil") ~= nil
+      
+      if is_inline then
+        -- For inline patterns, we want to compress only the block content
+        -- Find the consequence block (the { } part)
+        for child in node:iter_children() do
+          if child:type() == "block" then
+            local block_start_row, block_start_col, block_end_row, block_end_col = child:range()
+            table.insert(error_blocks, {
+              start_row = block_start_row,
+              start_col = block_start_col,
+              end_row = block_end_row,
+              end_col = block_end_col,
+              node = child,
+              is_inline_block_only = true
+            })
+            break
+          end
+        end
+      else
+        -- Regular patterns compress the entire if statement
+        table.insert(error_blocks, {
+          start_row = start_row,
+          start_col = start_col,
+          end_row = end_row,
+          end_col = end_col,
+          node = node,
+          is_inline = false
+        })
+      end
     elseif capture_name == "assign_block" or capture_name == "simple_assign_block" then
       local start_row, start_col, end_row, end_col = node:range()
       table.insert(error_assignments, {
