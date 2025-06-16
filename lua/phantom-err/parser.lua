@@ -1,12 +1,22 @@
 local M = {}
 
 function M.find_error_blocks(bufnr)
-  local parser = vim.treesitter.get_parser(bufnr, 'go')
-  if not parser then
+  -- Validate buffer before parsing
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return {}, {}, {}
   end
   
-  local tree = parser:parse()[1]
+  local success, parser = pcall(vim.treesitter.get_parser, bufnr, 'go')
+  if not success or not parser then
+    return {}, {}, {}
+  end
+  
+  local parse_success, trees = pcall(function() return parser:parse() end)
+  if not parse_success or not trees or #trees == 0 then
+    return {}, {}, {}
+  end
+  
+  local tree = trees[1]
   if not tree then
     return {}, {}, {}
   end

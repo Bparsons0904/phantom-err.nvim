@@ -8,30 +8,47 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
     return
   end
 
-  -- Validate that the buffer exists
-  if not vim.api.nvim_buf_is_valid(bufnr) then
+  -- Validate that the buffer exists and is loaded
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return
   end
 
-  -- Get current cursor position first to avoid unnecessary work
-  local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1 -- Convert to 0-based
+  -- Wrap in pcall to prevent crashes from race conditions
+  local success, result = pcall(function()
+    -- Get current cursor position first to avoid unnecessary work
+    local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1 -- Convert to 0-based
 
-  M.clear_conceals(bufnr)
+    M.clear_conceals(bufnr)
 
-  local opts = config.get()
+    local opts = config.get()
 
-  -- Always compress/conceal blocks - the mode determines how (includes auto-reveal logic)
-  M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
-  M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
-  
-  -- Apply general dimming to blocks where cursor is not present and no other modes applied
-  if opts.dimming_mode ~= "none" then
-    M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, opts.dimming_mode)
+    -- Always compress/conceal blocks - the mode determines how (includes auto-reveal logic)
+    M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
+    M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
+    
+    -- Apply general dimming to blocks where cursor is not present and no other modes applied
+    if opts.dimming_mode ~= "none" then
+      M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, opts.dimming_mode)
+    end
+  end)
+
+  if not success then
+    -- Silently handle errors to prevent race condition crashes
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        -- Retry once on next tick
+        M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
+      end
+    end)
   end
 end
 
 function M.show_all(bufnr)
-  M.clear_conceals(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+  
+  pcall(M.clear_conceals, bufnr)
 end
 
 function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, dimming_mode)
@@ -317,28 +334,48 @@ function M.compress_inline_block(bufnr, block)
 end
 
 function M.dim_regular_block(bufnr, block, hl_group)
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+  
   -- Show the full block content but with dimmed highlighting
   for row = block.start_row, block.end_row do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = #line_text,
-        hl_group = hl_group,
-      })
-    end
+    pcall(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          hl_group = hl_group,
+        })
+      end
+    end)
   end
 end
 
 function M.dim_inline_block(bufnr, block, hl_group)
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+  
   -- For inline blocks, only dim the content inside the {} block, not the if line
   for row = block.block_start_row + 1, block.block_end_row - 1 do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = #line_text,
-        hl_group = hl_group,
-      })
-    end
+    pcall(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          hl_group = hl_group,
+        })
+      end
+    end)
   end
 end
 

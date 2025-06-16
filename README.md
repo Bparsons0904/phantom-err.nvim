@@ -13,53 +13,6 @@ A Neovim plugin that improves Go code readability by providing configurable visu
 - **Real-time updates**: Responds to cursor movement and buffer changes
 - **Zero interference**: Works seamlessly with gopls, gofumpt, golangci-lint, and other Go tools
 
-## Before and After
-
-**Before:**
-
-```go
-func processFile(filename string) error {
-    file, err := os.Open(filename)
-    if err != nil {
-        log.Error("failed to open file", err)
-        return fmt.Errorf("opening %s: %w", filename, err)
-    }
-    defer file.Close()
-
-    data, err := io.ReadAll(file)
-    if err != nil {
-        log.Error("failed to read file", err)
-        return fmt.Errorf("reading %s: %w", filename, err)
-    }
-
-    if err := validateData(data); err != nil {
-        log.Error("validation failed", err)
-        return fmt.Errorf("validating %s: %w", filename, err)
-    }
-
-    return processData(data)
-}
-```
-
-**After (fold_errors mode):**
-
-```go
-func processFile(filename string) error {
-    file, err := os.Open(filename)
-    if err != nil { log.Error("failed to open file", err); return fmt.Errorf("opening %s: %w", filename, err) } (3 lines)
-    defer file.Close()
-
-    data, err := io.ReadAll(file)
-    if err != nil { log.Error("failed to read file", err); return fmt.Errorf("reading %s: %w", filename, err) } (3 lines)
-
-    if err := validateData(data); err != nil { log.Error("validation failed", err); return fmt.Errorf("validating %s: %w", filename, err) } (3 lines)
-
-    return processData(data)
-}
-```
-
-The compressed view reduces visual noise while preserving the logical flow. When you place your cursor within an error block, the plugin automatically reveals it based on your `auto_reveal_mode` setting.
-
 ## Installation
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
@@ -110,17 +63,17 @@ require('phantom-err').setup({
   -- - "none": No compression (only folding if fold_errors is true)
   single_line_mode = "conceal",
 
-  -- How to display error blocks when cursor enters them:
-  -- - "normal": Fully reveal the block (disable dimming/concealing)
-  -- - "comment": Keep dimmed with Comment highlight
-  -- - "conceal": Keep dimmed with Conceal highlight
-  auto_reveal_mode = "normal",
-
   -- General dimming mode when plugin is active (independent of cursor position):
   -- - "conceal": Dim all error blocks with Conceal highlight
   -- - "comment": Dim all error blocks with Comment highlight
   -- - "none": No general dimming (only compression/folding modes apply)
   dimming_mode = "conceal",
+
+  -- How to display error blocks when cursor enters them:
+  -- - "normal": Fully reveal the block (disable dimming/concealing)
+  -- - "comment": Keep dimmed with Comment highlight
+  -- - "conceal": Keep dimmed with Conceal highlight
+  auto_reveal_mode = "normal",
 })
 ```
 
@@ -179,11 +132,17 @@ if err != nil {
 }
 ```
 
-### Reverse Order
+### Nested Error Handling
 
 ```go
 if nil != err {
-    return err
+    if isNotFoundError(err) {
+        fmt.Printf("User %s not found, creating new user\n", userID)
+        user = createDefaultUser(userID)
+    } else {
+        slog.Error("Failed to fetch user", "userID", userID, "error", err)
+        return
+    }
 }
 ```
 
@@ -224,17 +183,6 @@ This plugin is currently in active development. The core functionality is stable
 ### Development Status
 
 This plugin is currently in active development. The core functionality is stable and ready for daily use.
-
-### Completed Features
-
-- ✅ Basic error block detection and parsing
-- ✅ Native folding-based compression
-- ✅ Virtual text overlay compression
-- ✅ Multiple display and dimming modes
-- ✅ Context-aware cursor revealing
-- ✅ Buffer-local state management
-- ✅ Auto-enable on Go files
-- ✅ Real-time updates on cursor movement and text changes
 
 ## Contributing
 

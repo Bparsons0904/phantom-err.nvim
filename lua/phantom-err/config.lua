@@ -4,7 +4,7 @@ local M = {}
 -- Compresses or dims Go error handling blocks to reduce visual clutter
 M.defaults = {
   -- Automatically enable phantom-err when opening Go files
-  auto_enable = true,
+  auto_enable = false,
 
   -- Use folding to completely hide error blocks (most aggressive compression)
   fold_errors = true,

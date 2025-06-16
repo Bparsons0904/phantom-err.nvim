@@ -95,15 +95,21 @@ function M.update_buffer_blocks(bufnr)
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       group = cursor_group,
       buffer = bufnr,
-      callback = function()
-        if state.is_enabled(bufnr) then
+      callback = function(event)
+        -- Validate buffer from event
+        local event_bufnr = event.buf
+        if type(event_bufnr) ~= "number" or not vim.api.nvim_buf_is_valid(event_bufnr) then
+          return
+        end
+        
+        if state.is_enabled(event_bufnr) then
           local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1
           -- Only update if cursor row actually changed
           if cursor_row ~= last_cursor_row then
             last_cursor_row = cursor_row
             -- Re-parse on cursor move to get current blocks
-            local current_regular, current_inline, current_assignments = parser.find_error_blocks(bufnr)
-            display.hide_blocks(bufnr, current_regular, current_inline, current_assignments)
+            local current_regular, current_inline, current_assignments = parser.find_error_blocks(event_bufnr)
+            display.hide_blocks(event_bufnr, current_regular, current_inline, current_assignments)
           end
         end
       end,
@@ -114,12 +120,18 @@ function M.update_buffer_blocks(bufnr)
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       group = change_group,
       buffer = bufnr,
-      callback = function()
-        if state.is_enabled(bufnr) then
+      callback = function(event)
+        -- Validate buffer from event
+        local event_bufnr = event.buf
+        if type(event_bufnr) ~= "number" or not vim.api.nvim_buf_is_valid(event_bufnr) then
+          return
+        end
+        
+        if state.is_enabled(event_bufnr) then
           -- Debounce the update to avoid excessive re-parsing
           vim.defer_fn(function()
-            if vim.api.nvim_buf_is_valid(bufnr) and state.is_enabled(bufnr) then
-              M.update_buffer_blocks(bufnr)
+            if vim.api.nvim_buf_is_valid(event_bufnr) and state.is_enabled(event_bufnr) then
+              M.update_buffer_blocks(event_bufnr)
             end
           end, 200) -- 200ms delay
         end
@@ -131,37 +143,6 @@ function M.update_buffer_blocks(bufnr)
 end
 
 
--- Debug function to inspect detected blocks
-function M.debug_blocks()
-  local bufnr = vim.api.nvim_get_current_buf()
-  if vim.bo[bufnr].filetype ~= "go" then
-    print("Not a Go file")
-    return
-  end
-
-  local regular_blocks, inline_blocks, error_assignments = parser.find_error_blocks(bufnr)
-  
-  print("=== DEBUG: DETECTED BLOCKS ===")
-  print("Regular blocks:", #regular_blocks)
-  for i, block in ipairs(regular_blocks) do
-    print(string.format("  Block %d: lines %d-%d", i, block.start_row + 1, block.end_row + 1))
-    local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
-    print("    First line:", lines[1] or "")
-    print("    Last line:", lines[#lines] or "")
-  end
-  
-  print("Inline blocks:", #inline_blocks)
-  for i, block in ipairs(inline_blocks) do
-    print(string.format("  Inline %d: if=%d-%d, block=%d-%d", i, 
-      block.if_start_row + 1, block.if_end_row + 1,
-      block.block_start_row + 1, block.block_end_row + 1))
-  end
-  
-  print("Error assignments:", #error_assignments)
-  for i, assign in ipairs(error_assignments) do
-    print(string.format("  Assignment %d: lines %d-%d", i, assign.start_row + 1, assign.end_row + 1))
-  end
-end
 
 return M
 
