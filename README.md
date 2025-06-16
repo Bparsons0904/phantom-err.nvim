@@ -10,6 +10,13 @@ phantom-err.nvim preserves Go's excellent error handling semantics while dramati
 
 **The result**: Keep the power of explicit error handling, gain the clarity of cleaner code.
 
+## Examples
+### Fold On w/ Concealed Single Line 
+![image](https://github.com/user-attachments/assets/276ce741-7040-4b42-96f2-31ee499b0fa0)
+
+### Fold and Single Line Off
+![image](https://github.com/user-attachments/assets/cbbc98c3-f16d-4ec8-b25b-bbc079b25d80)
+
 ## Features
 
 - **Visual-only changes**: Buffer content remains unchanged for formatters/LSP compatibility
