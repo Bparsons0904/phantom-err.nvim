@@ -2,6 +2,14 @@
 
 A Neovim plugin that improves Go code readability by providing configurable visual folding of `if err != nil {}` error handling blocks. The plugin uses line concealing and virtual text to hide repetitive error handling while maintaining the actual buffer content unchanged, ensuring full compatibility with Go tooling (LSP, formatters, linters).
 
+## Why phantom-err.nvim?
+
+Go's explicit error handling is one of its greatest strengths—it encourages thoughtful error management and makes error paths visible. However, this approach can create visually dense code where error handling blocks dominate the screen real estate, making it harder to follow the main business logic.
+
+phantom-err.nvim preserves Go's excellent error handling semantics while dramatically improving code readability. By intelligently compressing repetitive `if err != nil` blocks, you can focus on the core logic without losing the robustness that makes Go error handling so valuable.
+
+**The result**: Keep the power of explicit error handling, gain the clarity of cleaner code.
+
 ## Features
 
 - **Visual-only changes**: Buffer content remains unchanged for formatters/LSP compatibility
