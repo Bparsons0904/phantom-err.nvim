@@ -63,6 +63,9 @@ function M.get_enabled_windows_for_buffer(bufnr)
     end
   end
   
+  config.log_debug("state", string.format("Buffer %d has %d enabled windows: [%s]", 
+    bufnr, #enabled_windows, table.concat(enabled_windows, ", ")))
+  
   return enabled_windows
 end
 

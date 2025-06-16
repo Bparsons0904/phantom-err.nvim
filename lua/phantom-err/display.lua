@@ -32,10 +32,13 @@ local function get_all_cursor_positions_for_buffer(bufnr)
     local cursor_row = state.get_current_cursor_row(winid)
     if cursor_row >= 0 then
       cursor_positions[#cursor_positions + 1] = cursor_row
+      config.log_debug("display", string.format("Window %d cursor at row %d", winid, cursor_row))
+    else
+      config.log_debug("display", string.format("Window %d has invalid cursor position: %d", winid, cursor_row))
     end
   end
   
-  config.log_debug("display", string.format("Buffer %d has %d cursor positions: [%s]", 
+  config.log_info("display", string.format("Buffer %d has %d enabled windows with cursor positions: [%s]", 
     bufnr, #cursor_positions, table.concat(cursor_positions, ", ")))
   
   return cursor_positions
@@ -43,6 +46,9 @@ end
 
 -- Check if any cursor is in an error context (block or related assignment)
 local function is_any_cursor_in_error_context(cursor_positions, block_start_row, block_end_row, error_assignments)
+  config.log_info("display", string.format("Checking cursors [%s] against block %d-%d", 
+    table.concat(cursor_positions, ", "), block_start_row, block_end_row))
+    
   for _, cursor_row in ipairs(cursor_positions) do
     -- Check if cursor is in the block
     local is_cursor_in_block = cursor_row >= block_start_row and cursor_row <= block_end_row
@@ -50,10 +56,16 @@ local function is_any_cursor_in_error_context(cursor_positions, block_start_row,
     -- Check if cursor is on a related assignment
     local cursor_on_related_assignment = is_cursor_on_related_assignment(cursor_row, error_assignments, block_start_row)
     
+    config.log_info("display", string.format("Cursor %d: in_block=%s, related_assignment=%s", 
+      cursor_row, tostring(is_cursor_in_block), tostring(cursor_on_related_assignment)))
+    
     if is_cursor_in_block or cursor_on_related_assignment then
+      config.log_info("display", string.format("Found cursor in error context at row %d", cursor_row))
       return true
     end
   end
+  
+  config.log_info("display", "No cursor found in error context")
   return false
 end
 
@@ -89,6 +101,12 @@ function M.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_as
 
     -- Get cursor positions from ALL windows viewing this buffer
     local all_cursor_positions = get_all_cursor_positions_for_buffer(bufnr)
+    
+    -- Special handling for multiple windows: ensure effects are properly coordinated
+    local enabled_windows = state.get_enabled_windows_for_buffer(bufnr)
+    if #enabled_windows > 1 then
+      config.log_debug("display", string.format("Coordinating display for %d windows viewing buffer %d", #enabled_windows, bufnr))
+    end
     
     -- Apply compression/concealing based on ALL cursor positions
     M.compress_regular_blocks_multi_cursor(bufnr, regular_blocks, error_assignments, all_cursor_positions)
@@ -210,6 +228,32 @@ function M.clear_conceals(bufnr)
   end
 end
 
+-- Clear folds for a specific block range
+function M.clear_folds_for_block(bufnr, start_row, end_row)
+  local wins = vim.fn.win_findbuf(bufnr)
+  for _, win in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_call(win, function()
+        -- Convert to 1-based line numbers for vim commands
+        local fold_start = start_row + 1
+        local fold_end = end_row + 1
+        
+        -- Open any folds in this range
+        vim.cmd(string.format("silent! %d,%dfoldopen!", fold_start, fold_end))
+        
+        config.log_info("display", string.format("Cleared folds for block %d-%d in window %d", start_row, end_row, win))
+      end)
+    end
+  end
+  
+  -- Clear stored fold texts for this block
+  for key, _ in pairs(fold_texts) do
+    if key:match("^" .. bufnr .. "_" .. start_row .. "$") then
+      fold_texts[key] = nil
+    end
+  end
+end
+
 function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
   -- Ensure conceallevel is set for proper concealing
   vim.api.nvim_buf_set_option(bufnr, "conceallevel", 2)
@@ -310,31 +354,44 @@ function M.compress_regular_blocks_multi_cursor(bufnr, regular_blocks, error_ass
   vim.api.nvim_buf_set_option(bufnr, "conceallevel", 2)
 
   local opts = config.get()
+  config.log_info("display", string.format("Config: fold_errors=%s, single_line_mode=%s, auto_reveal_mode=%s", 
+    tostring(opts.fold_errors), opts.single_line_mode, opts.auto_reveal_mode))
 
   for _, block in ipairs(regular_blocks) do
     -- Check if ANY cursor is in error context for this block
     local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
       cursor_positions, block.start_row, block.end_row, error_assignments)
 
-    if not is_any_cursor_in_error_context then
-      -- Apply folding if enabled (takes priority)
+    -- REVERSED LOGIC: If any cursor is in the error context, fully reveal the block
+    -- This ensures that when ANY window has cursor in error context, the block is revealed
+    if is_any_cursor_in_error_context then
+      -- Apply auto-reveal mode when ANY cursor is in error context
+      if opts.auto_reveal_mode == "normal" then
+        config.log_info("display", string.format("REVEALING block %d-%d (auto_reveal_mode=normal)", block.start_row, block.end_row))
+        -- Actively clear any folds for this block to ensure it's fully revealed
+        M.clear_folds_for_block(bufnr, block.start_row, block.end_row)
+      elseif opts.auto_reveal_mode == "comment" then
+        config.log_info("display", string.format("DIMMING block %d-%d with Comment (auto_reveal_mode=comment)", block.start_row, block.end_row))
+        M.dim_regular_block(bufnr, block, "Comment")
+      elseif opts.auto_reveal_mode == "conceal" then
+        config.log_info("display", string.format("DIMMING block %d-%d with Conceal (auto_reveal_mode=conceal)", block.start_row, block.end_row))
+        M.dim_regular_block(bufnr, block, "Conceal")
+      end
+    else
+      -- Apply folding/compression when NO cursor is in error context
+      config.log_info("display", string.format("NO cursor in error context for block %d-%d, applying compression/folding", block.start_row, block.end_row))
       if opts.fold_errors then
+        config.log_info("display", string.format("FOLDING block %d-%d (fold_errors=true)", block.start_row, block.end_row))
         M.conceal_regular_block(bufnr, block)
       -- Otherwise apply single-line compression mode  
       elseif opts.single_line_mode == "conceal" then
+        config.log_info("display", string.format("COMPRESSING block %d-%d (single_line_mode=conceal)", block.start_row, block.end_row))
         M.compress_regular_block(bufnr, block)
       elseif opts.single_line_mode == "comment" then
+        config.log_info("display", string.format("DIMMING block %d-%d with Comment (single_line_mode=comment)", block.start_row, block.end_row))
         M.dim_regular_block(bufnr, block, "Comment")
-      -- "none" mode does nothing
-      end
-    else
-      -- Apply auto-reveal mode when ANY cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
-        -- Do nothing - fully reveal the block
-      elseif opts.auto_reveal_mode == "comment" then
-        M.dim_regular_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
-        M.dim_regular_block(bufnr, block, "Conceal")
+      else
+        config.log_info("display", string.format("No compression applied for block %d-%d (single_line_mode=%s)", block.start_row, block.end_row, opts.single_line_mode or "nil"))
       end
     end
   end
@@ -352,25 +409,35 @@ function M.compress_inline_blocks_multi_cursor(bufnr, inline_blocks, error_assig
     local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
       cursor_positions, block.if_start_row, block.if_end_row, error_assignments)
 
-    if not is_any_cursor_in_error_context then
-      -- Apply folding if enabled (takes priority)
+    -- REVERSED LOGIC: If any cursor is in the error context, fully reveal the block
+    if is_any_cursor_in_error_context then
+      -- Apply auto-reveal mode when ANY cursor is in error context
+      if opts.auto_reveal_mode == "normal" then
+        config.log_info("display", string.format("REVEALING inline block %d-%d (auto_reveal_mode=normal)", block.if_start_row, block.if_end_row))
+        -- Actively clear any folds for this block to ensure it's fully revealed
+        M.clear_folds_for_block(bufnr, block.block_start_row + 1, block.block_end_row)
+      elseif opts.auto_reveal_mode == "comment" then
+        config.log_info("display", string.format("DIMMING inline block %d-%d with Comment (auto_reveal_mode=comment)", block.if_start_row, block.if_end_row))
+        M.dim_inline_block(bufnr, block, "Comment")
+      elseif opts.auto_reveal_mode == "conceal" then
+        config.log_info("display", string.format("DIMMING inline block %d-%d with Conceal (auto_reveal_mode=conceal)", block.if_start_row, block.if_end_row))
+        M.dim_inline_block(bufnr, block, "Conceal")
+      end
+    else
+      -- Apply folding/compression when NO cursor is in error context
+      config.log_info("display", string.format("NO cursor in error context for inline block %d-%d, applying compression/folding", block.if_start_row, block.if_end_row))
       if opts.fold_errors then
+        config.log_info("display", string.format("FOLDING inline block %d-%d (fold_errors=true)", block.if_start_row, block.if_end_row))
         M.conceal_inline_block(bufnr, block)
       -- Otherwise apply single-line compression mode
       elseif opts.single_line_mode == "conceal" then
+        config.log_info("display", string.format("COMPRESSING inline block %d-%d (single_line_mode=conceal)", block.if_start_row, block.if_end_row))
         M.compress_inline_block(bufnr, block)
       elseif opts.single_line_mode == "comment" then
+        config.log_info("display", string.format("DIMMING inline block %d-%d with Comment (single_line_mode=comment)", block.if_start_row, block.if_end_row))
         M.dim_inline_block(bufnr, block, "Comment")
-      -- "none" mode does nothing
-      end
-    else
-      -- Apply auto-reveal mode when ANY cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
-        -- Do nothing - fully reveal the block
-      elseif opts.auto_reveal_mode == "comment" then
-        M.dim_inline_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
-        M.dim_inline_block(bufnr, block, "Conceal")
+      else
+        config.log_info("display", string.format("No compression applied for inline block %d-%d (single_line_mode=%s)", block.if_start_row, block.if_end_row, opts.single_line_mode or "nil"))
       end
     end
   end
@@ -590,30 +657,32 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
   -- Configure fillchars to remove trailing dots from folds
   vim.wo.fillchars = "fold: "
 
-  -- Use manual folding to actually compress the lines
-  local win = vim.fn.bufwinid(bufnr)
-  if win == -1 then
-    return
-  end
+  -- Apply manual folding to ALL windows viewing this buffer
+  local wins = vim.fn.win_findbuf(bufnr)
+  for _, win in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(win) then
+      -- Use vim.api.nvim_win_call to avoid window focus issues
+      vim.api.nvim_win_call(win, function()
+        -- Set up manual folding if not already set
+        if vim.wo.foldmethod ~= "manual" then
+          vim.wo.foldmethod = "manual"
+        end
 
-  -- Use vim.api.nvim_win_call to avoid window focus issues
-  vim.api.nvim_win_call(win, function()
-    -- Set up manual folding if not already set
-    if vim.wo.foldmethod ~= "manual" then
-      vim.wo.foldmethod = "manual"
+        -- Convert to 1-based line numbers for vim commands
+        local fold_start = start_line + 1
+        local fold_end = end_line + 1
+
+        -- Create and close the fold
+        vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
+        vim.cmd(string.format("silent! %dfoldclose", fold_start))
+
+        -- Set window-local foldtext function
+        vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
+        
+        config.log_info("display", string.format("Applied fold %d-%d to window %d", start_line, end_line, win))
+      end)
     end
-
-    -- Convert to 1-based line numbers for vim commands
-    local fold_start = start_line + 1
-    local fold_end = end_line + 1
-
-    -- Create and close the fold
-    vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
-    vim.cmd(string.format("silent! %dfoldclose", fold_start))
-
-    -- Set window-local foldtext function
-    vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
-  end)
+  end
 
   -- Set custom fold text using compressed content like the original
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)

@@ -87,18 +87,49 @@ vim.api.nvim_create_user_command('GoErrorDebug', function()
   local state = require('phantom-err.state')
   local info = state.get_debug_info()
   
-  vim.notify('phantom-err Debug Info:', vim.log.levels.INFO)
-  vim.notify(string.format('  Total windows tracked: %d', info.total_tracked_windows), vim.log.levels.INFO)
-  vim.notify(string.format('  Valid windows: %d', info.valid_windows), vim.log.levels.INFO)
-  vim.notify(string.format('  Enabled windows: %d', info.enabled_windows), vim.log.levels.INFO)
-  vim.notify(string.format('  Cursor positions tracked: %d', info.cursor_positions_tracked), vim.log.levels.INFO)
+  print('=== PHANTOM-ERR DEBUG ===')
+  print('Total windows tracked: ' .. info.total_tracked_windows)
+  print('Valid windows: ' .. info.valid_windows)
+  print('Enabled windows: ' .. info.enabled_windows)
+  print('Cursor positions tracked: ' .. info.cursor_positions_tracked)
   
   -- Show current window status
   local current_win = vim.api.nvim_get_current_win()
+  local current_buf = vim.api.nvim_get_current_buf()
   local is_enabled = state.is_enabled(current_win)
   local cursor_pos = state.get_cursor_position(current_win)
-  vim.notify(string.format('  Current window %d: enabled=%s, cursor=%d', 
-    current_win, tostring(is_enabled), cursor_pos), vim.log.levels.INFO)
+  
+  print('Current window: ' .. current_win)
+  print('Current buffer: ' .. current_buf)
+  print('Buffer filetype: ' .. vim.bo[current_buf].filetype)
+  print('Window enabled: ' .. tostring(is_enabled))
+  print('Cursor position: ' .. cursor_pos)
+  
+  local enabled_windows = state.get_enabled_windows_for_buffer(current_buf)
+  print('Enabled windows for buffer: [' .. table.concat(enabled_windows, ', ') .. ']')
+  
+  vim.notify('phantom-err Debug Info printed to console', vim.log.levels.INFO)
 end, {
   desc = 'Show phantom-err debug information'
+})
+
+-- Command to clear debug log
+vim.api.nvim_create_user_command('GoErrorLogClear', function()
+  local log_file = "/tmp/phantom-err.log"
+  local file = io.open(log_file, "w")
+  if file then
+    file:close()
+    vim.notify('phantom-err: Debug log cleared', vim.log.levels.INFO)
+  else
+    vim.notify('phantom-err: Failed to clear debug log', vim.log.levels.ERROR)
+  end
+end, {
+  desc = 'Clear phantom-err debug log'
+})
+
+-- Command to view debug log
+vim.api.nvim_create_user_command('GoErrorLogView', function()
+  vim.cmd('tabnew /tmp/phantom-err.log')
+end, {
+  desc = 'View phantom-err debug log'
 })

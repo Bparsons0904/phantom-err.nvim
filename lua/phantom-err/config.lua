@@ -24,14 +24,24 @@ local function log_message(module, message, level)
   level = level or vim.log.levels.ERROR
   
   -- Get current log level from options (fallback to defaults if not set)
-  local current_log_level = LOG_LEVELS.warn -- default
+  local current_log_level = LOG_LEVELS.debug -- Force debug level for troubleshooting
   if M.options and M.options.log_level then
-    current_log_level = LOG_LEVELS[M.options.log_level] or LOG_LEVELS.warn
+    current_log_level = LOG_LEVELS[M.options.log_level] or LOG_LEVELS.debug
   end
   
   -- Only log if message level is at or above current log level
   if level >= current_log_level then
-    vim.notify(string.format("phantom-err [%s]: %s", module, message), level)
+    -- Log to file instead of notifications for debugging
+    local log_file = "/tmp/phantom-err.log"
+    local timestamp = os.date("%H:%M:%S")
+    local level_name = LOG_LEVEL_NAMES[level] or "unknown"
+    local log_line = string.format("[%s] %s [%s]: %s\n", timestamp, level_name, module, message)
+    
+    local file = io.open(log_file, "a")
+    if file then
+      file:write(log_line)
+      file:close()
+    end
   end
 end
 
@@ -90,7 +100,7 @@ M.defaults = {
   -- - "info": Info, warnings, and errors  
   -- - "debug": All messages including debug info
   -- - "off": No logging
-  log_level = "warn",
+  log_level = "debug",
 }
 
 M.options = {}

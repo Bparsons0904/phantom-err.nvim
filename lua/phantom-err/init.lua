@@ -23,6 +23,8 @@ function M.setup(opts)
   
   local options = config.get()
   if options.auto_enable then
+    local auto_enable_group = vim.api.nvim_create_augroup("phantom_err_auto_enable", { clear = true })
+    
     -- Set up autocmd to automatically enable on Go files
     vim.api.nvim_create_autocmd("FileType", {
       pattern = "go",
@@ -35,7 +37,33 @@ function M.setup(opts)
           end
         end, AUTO_ENABLE_DELAY_MS)
       end,
-      group = vim.api.nvim_create_augroup("phantom_err_auto_enable", { clear = true })
+      group = auto_enable_group
+    })
+    
+    -- Set up autocmd to enable phantom-err when switching to a Go file window
+    vim.api.nvim_create_autocmd({"WinEnter", "BufEnter"}, {
+      pattern = "*.go",
+      callback = function()
+        local winid = vim.api.nvim_get_current_win()
+        local bufnr = vim.api.nvim_get_current_buf()
+        
+        config.log_debug("init", string.format("WinEnter/BufEnter event: window %d, buffer %d, enabled=%s", 
+          winid, bufnr, tostring(state.is_enabled(winid))))
+        
+        -- Check if this window is already enabled
+        if not state.is_enabled(winid) and vim.bo[bufnr].filetype == "go" then
+          config.log_debug("init", string.format("Window %d not enabled for Go file, scheduling enable", winid))
+          vim.defer_fn(function()
+            if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "go" then
+              config.log_debug("init", string.format("Auto-enabling phantom-err for window %d on switch", winid))
+              M.enable_window(winid)
+            end
+          end, AUTO_ENABLE_DELAY_MS)
+        else
+          config.log_debug("init", string.format("Window %d already enabled or not Go file", winid))
+        end
+      end,
+      group = auto_enable_group
     })
   end
 end
@@ -132,8 +160,16 @@ function M.enable_window(winid)
       -- Set up window-specific autocmds AFTER setting enabled state
       M.setup_window_autocmds(winid)
       
-      -- Apply initial display
-      display.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_assignments)
+      -- Check if this is an additional window for an already processed buffer
+      local enabled_windows = state.get_enabled_windows_for_buffer(bufnr)
+      if #enabled_windows > 1 then
+        -- Multiple windows viewing the same buffer - refresh display for all
+        config.log_debug("init", string.format("Multiple windows (%d) viewing buffer %d, refreshing display", #enabled_windows, bufnr))
+        M.refresh_buffer_display(bufnr)
+      else
+        -- First window for this buffer - apply initial display
+        display.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_assignments)
+      end
     else
       state.set_enabled(winid, false)
       config.log_debug("init", string.format("No error blocks found in buffer %d for window %d", bufnr, winid))
@@ -200,21 +236,33 @@ function M.setup_buffer_autocmds(bufnr)
         return
       end
       
-      -- Get current window that triggered the event
+      -- Instead of just checking current window, check ALL enabled windows for this buffer
+      -- and update cursor positions for all of them
+      local enabled_windows = state.get_enabled_windows_for_buffer(event_bufnr)
       local current_win = vim.api.nvim_get_current_win()
       
-      -- Check if the current window is enabled and viewing this buffer
-      if state.is_enabled(current_win) and vim.api.nvim_win_get_buf(current_win) == event_bufnr then
-        -- Update cursor position for the current window
-        local cursor_row = state.get_current_cursor_row(current_win)
-        local old_cursor_row = state.get_cursor_position(current_win)
+      config.log_info("init", string.format("CursorMoved event: buffer %d, current_win %d, enabled_windows: [%s]", 
+        event_bufnr, current_win, table.concat(enabled_windows, ", ")))
+      
+      local any_change = false
+      
+      -- Update cursor positions for ALL enabled windows viewing this buffer
+      for _, winid in ipairs(enabled_windows) do
+        local cursor_row = state.get_current_cursor_row(winid)
+        local old_cursor_row = state.get_cursor_position(winid)
         
-        -- Only update if cursor row actually changed
+        config.log_info("init", string.format("Window %d: cursor %d -> %d", winid, old_cursor_row, cursor_row))
+        
         if cursor_row ~= old_cursor_row and cursor_row ~= -1 then
-          state.set_cursor_position(current_win, cursor_row)
-          -- Refresh display for the entire buffer (considers all windows)
-          M.refresh_buffer_display(event_bufnr)
+          state.set_cursor_position(winid, cursor_row)
+          any_change = true
         end
+      end
+      
+      -- Only refresh display if any cursor position actually changed
+      if any_change then
+        config.log_info("init", string.format("Cursor positions changed, refreshing display for buffer %d", event_bufnr))
+        M.refresh_buffer_display(event_bufnr)
       end
     end,
   })
