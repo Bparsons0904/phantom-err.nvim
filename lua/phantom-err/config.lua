@@ -24,9 +24,9 @@ local function log_message(module, message, level)
   level = level or vim.log.levels.ERROR
   
   -- Get current log level from options (fallback to defaults if not set)
-  local current_log_level = LOG_LEVELS.debug -- Force debug level for troubleshooting
+  local current_log_level = LOG_LEVELS.warn -- Default to warn level
   if M.options and M.options.log_level then
-    current_log_level = LOG_LEVELS[M.options.log_level] or LOG_LEVELS.debug
+    current_log_level = LOG_LEVELS[M.options.log_level] or LOG_LEVELS.warn
   end
   
   -- Only log if message level is at or above current log level

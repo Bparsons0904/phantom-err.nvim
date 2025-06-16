@@ -80,21 +80,71 @@ function M.find_error_blocks(bufnr)
     if capture_name == "if_block" or capture_name == "if_block_reverse" then
       local start_row, start_col, end_row, end_col = node:range()
       
-      -- Check if this is an inline pattern by examining the first line
-      local first_line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
-      local is_inline = first_line:match("if.*:=.*;.*err%s*!=%s*nil") ~= nil
+      -- Check if this is an inline pattern by examining multiple lines
+      -- Look for assignment pattern (if ... := ...) in the if statement
+      local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
+      local is_inline = false
+      
+      -- Check if any line in the if statement contains an assignment operator ":="
+      for _, line in ipairs(lines) do
+        if line:match("if.*:=") or line:match("%s*:=") then
+          is_inline = true
+          break
+        end
+      end
       
       if is_inline then
-        -- For inline patterns, store both the full if statement and the block content
+        -- For inline patterns, be more precise about what content to dim
         for child in node:iter_children() do
           if child:type() == "block" then
             local block_start_row, block_start_col, block_end_row, block_end_col = child:range()
+            
+            -- For complex inline patterns, we need to identify the exact error handling content
+            -- by looking for the actual error handling logic (not the assignment part)
+            local actual_error_start_row = block_start_row
+            local actual_error_end_row = block_end_row
+            
+            -- Analyze the content to find where actual error handling begins
+            local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
+            
+            -- Look for the line that contains "err != nil" or "nil != err" to find where error handling starts
+            for i, line in ipairs(lines) do
+              local line_row = start_row + i - 1
+              if line:match("err%s*!=%s*nil") or line:match("nil%s*!=%s*err") then
+                -- Find the opening brace after this line
+                local brace_line = line
+                local brace_row = line_row
+                
+                -- Check if the brace is on the same line
+                if not brace_line:match("%{") then
+                  -- Look for the brace on subsequent lines
+                  for j = i + 1, #lines do
+                    local next_line = lines[j]
+                    local next_row = start_row + j - 1
+                    if next_line:match("%{") then
+                      brace_row = next_row
+                      break
+                    end
+                  end
+                end
+                
+                -- The actual error handling content starts after the opening brace
+                actual_error_start_row = brace_row
+                break
+              end
+            end
+            
+            -- Debug logging for inline block detection
+            local config = require("phantom-err.config")
+            config.log_debug("parser", string.format("Detected inline block: if %d-%d, error handling content %d-%d", 
+              start_row, end_row, actual_error_start_row + 1, actual_error_end_row))
+            
             table.insert(inline_blocks, {
               if_start_row = start_row,
               if_end_row = end_row,
-              block_start_row = block_start_row,
+              block_start_row = actual_error_start_row,
               block_start_col = block_start_col,
-              block_end_row = block_end_row,
+              block_end_row = actual_error_end_row,
               block_end_col = block_end_col,
               if_node = node,
               block_node = child

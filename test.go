@@ -75,6 +75,19 @@ func main() {
 	}
 
 	fmt.Printf("Successfully processed user: %s\n", user.Name)
+	
+	// Complex inline error handling case - should only dim the error handling content
+	subAccountID := "test-account"
+	var priorMeetings []Meeting
+	if err := database.DB.
+		Scopes(WithQSMMeetingRelations).
+		Where("end_time IS NOT null AND type = ? AND sub_account_id = ?", "qsm", subAccountID).
+		Order("meeting_period_start DESC").
+		Find(&priorMeetings).Error; err != nil {
+		slog.Error("Error getting meeting members", "error", err)
+		return c.Status(fiber.StatusInternalServerError).
+			JSON(fiber.Map{"status": "error", "message": "Error getting meeting members", "error": err})
+	}
 }
 
 type Config struct {
@@ -86,6 +99,14 @@ type User struct {
 	ID    string
 	Name  string
 	Email string
+}
+
+type Meeting struct {
+	ID                 string
+	EndTime           *string
+	Type              string
+	SubAccountID      string
+	MeetingPeriodStart string
 }
 
 type DatabaseConnection struct {
@@ -143,4 +164,39 @@ func rollbackChanges(userID string) {
 
 func cleanup() {
 	slog.Info("Performing cleanup operations")
+}
+
+// Mock types for the complex inline error handling test
+type Database struct {
+	DB *DatabaseORM
+}
+
+type DatabaseORM struct{}
+
+func (db *DatabaseORM) Scopes(scope func()) *DatabaseORM { return db }
+func (db *DatabaseORM) Where(query string, args ...interface{}) *DatabaseORM { return db }
+func (db *DatabaseORM) Order(order string) *DatabaseORM { return db }
+func (db *DatabaseORM) Find(dest interface{}) *DatabaseResult { return &DatabaseResult{} }
+
+type DatabaseResult struct {
+	Error error
+}
+
+type FiberContext struct{}
+type FiberMap map[string]interface{}
+
+func (c *FiberContext) Status(code int) *FiberContext { return c }
+func (c *FiberContext) JSON(data interface{}) error { return nil }
+
+var database = Database{DB: &DatabaseORM{}}
+var c = &FiberContext{}
+
+func WithQSMMeetingRelations() {}
+
+var fiber = struct {
+	StatusInternalServerError int
+	Map                      func(map[string]interface{}) FiberMap
+}{
+	StatusInternalServerError: 500,
+	Map: func(m map[string]interface{}) FiberMap { return FiberMap(m) },
 }
