@@ -131,11 +131,34 @@ Applies consistent dimming across all error blocks when no other modes are activ
 
 ## Commands
 
-| Command          | Description                   |
-| ---------------- | ----------------------------- |
-| `:GoErrorToggle` | Toggle error block visibility |
-| `:GoErrorShow`   | Show all error blocks         |
-| `:GoErrorHide`   | Hide all error blocks         |
+| Command          | Description                         |
+| ---------------- | ----------------------------------- |
+| `:GoErrorToggle` | Toggle error block visibility       |
+| `:GoErrorShow`   | Show all error blocks               |
+| `:GoErrorHide`   | Hide all error blocks               |
+| `:GoErrorHealth` | Run health check and diagnostics    |
+
+## Health Check
+
+phantom-err.nvim includes a comprehensive health check to help troubleshoot setup issues and verify your installation:
+
+```vim
+:checkhealth phantom-err
+# or
+:GoErrorHealth
+```
+
+The health check validates:
+
+- **Core Requirements**: Neovim version, tree-sitter installation
+- **Go Parser**: tree-sitter Go parser availability and functionality 
+- **Module Loading**: All plugin modules load correctly
+- **Configuration**: Current settings and validation
+- **Environment**: conceallevel, filetype detection, performance considerations
+- **Conflicts**: Detection of plugins that may interfere with concealing
+- **Usage Info**: Available commands and troubleshooting tips
+
+If you encounter issues, run the health check first—it will identify most common problems and provide specific guidance for resolution.
 
 ## Supported Patterns
 

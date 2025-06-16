@@ -3,19 +3,61 @@ local M = {}
 -- Configuration for phantom-err.nvim
 -- Compresses or dims Go error handling blocks to reduce visual clutter
 
--- Error handling utility
-local function log_error(module, message, level)
+-- Log level mapping
+local LOG_LEVELS = {
+  debug = vim.log.levels.DEBUG,
+  info = vim.log.levels.INFO,
+  warn = vim.log.levels.WARN,
+  error = vim.log.levels.ERROR,
+  off = math.huge, -- Never log
+}
+
+local LOG_LEVEL_NAMES = {
+  [vim.log.levels.DEBUG] = "debug",
+  [vim.log.levels.INFO] = "info", 
+  [vim.log.levels.WARN] = "warn",
+  [vim.log.levels.ERROR] = "error",
+}
+
+-- Enhanced logging utility with level checking
+local function log_message(module, message, level)
   level = level or vim.log.levels.ERROR
-  vim.notify(string.format("phantom-err [%s]: %s", module, message), level)
+  
+  -- Get current log level from options (fallback to defaults if not set)
+  local current_log_level = LOG_LEVELS.warn -- default
+  if M.options and M.options.log_level then
+    current_log_level = LOG_LEVELS[M.options.log_level] or LOG_LEVELS.warn
+  end
+  
+  -- Only log if message level is at or above current log level
+  if level >= current_log_level then
+    vim.notify(string.format("phantom-err [%s]: %s", module, message), level)
+  end
+end
+
+-- Convenience functions for different log levels
+local function log_error(module, message)
+  log_message(module, message, vim.log.levels.ERROR)
 end
 
 local function log_warn(module, message)
-  log_error(module, message, vim.log.levels.WARN)
+  log_message(module, message, vim.log.levels.WARN)
 end
 
--- Export error handling functions
+local function log_info(module, message)
+  log_message(module, message, vim.log.levels.INFO)
+end
+
+local function log_debug(module, message)
+  log_message(module, message, vim.log.levels.DEBUG)
+end
+
+-- Export logging functions
 M.log_error = log_error
 M.log_warn = log_warn
+M.log_info = log_info
+M.log_debug = log_debug
+M.log_message = log_message
 
 M.defaults = {
   -- Automatically enable phantom-err when opening Go files
@@ -41,6 +83,14 @@ M.defaults = {
   -- - "comment": Keep dimmed with Comment highlight
   -- - "conceal": Keep dimmed with Conceal highlight
   auto_reveal_mode = "normal",
+
+  -- Debug logging level:
+  -- - "error": Only errors
+  -- - "warn": Warnings and errors
+  -- - "info": Info, warnings, and errors  
+  -- - "debug": All messages including debug info
+  -- - "off": No logging
+  log_level = "warn",
 }
 
 M.options = {}
@@ -52,6 +102,7 @@ function M.setup(opts)
   M.validate_and_fix_option("single_line_mode", { "conceal", "comment", "none" }, "none")
   M.validate_and_fix_option("auto_reveal_mode", { "normal", "comment", "conceal" }, "normal")
   M.validate_and_fix_option("dimming_mode", { "conceal", "comment", "none" }, "conceal")
+  M.validate_and_fix_option("log_level", { "debug", "info", "warn", "error", "off" }, "warn")
 
   -- Validate boolean options
   M.validate_and_fix_boolean("auto_enable", true)
