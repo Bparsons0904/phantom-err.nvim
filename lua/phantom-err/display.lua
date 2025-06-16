@@ -26,7 +26,7 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
   
   -- Apply general dimming to blocks where cursor is not present and no other modes applied
   if opts.dimming_mode ~= "none" then
-    M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_row, opts.dimming_mode)
+    M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, opts.dimming_mode)
   end
 end
 
@@ -34,20 +34,40 @@ function M.show_all(bufnr)
   M.clear_conceals(bufnr)
 end
 
-function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_row, dimming_mode)
+function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, dimming_mode)
   local hl_group = dimming_mode == "comment" and "Comment" or "Conceal"
   local opts = config.get()
   
   -- Dim regular blocks only where no other processing occurred
   for _, block in ipairs(regular_blocks) do
+    -- Validate block ranges
+    if not block or not block.start_row or not block.end_row or 
+       block.start_row < 0 or block.end_row < block.start_row then
+      goto continue_regular
+    end
+    
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
     
+    -- Check if cursor is on an error assignment that's related to this specific block
+    local cursor_on_related_assignment = false
+    for _, assignment in ipairs(error_assignments) do
+      if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
+        -- Check if this assignment is immediately before this error block (within a few lines)
+        if assignment.end_row < block.start_row and (block.start_row - assignment.end_row) <= 3 then
+          cursor_on_related_assignment = true
+          break
+        end
+      end
+    end
+    
+    local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
+    
     -- Only apply general dimming if:
-    -- 1. Cursor is not in block AND no compression modes applied (single_line_mode == "none", fold_errors == false)
-    -- 2. OR cursor is in block AND auto_reveal_mode allows dimming
+    -- 1. Cursor is not in error context AND no compression modes applied (single_line_mode == "none", fold_errors == false)
+    -- 2. OR cursor is in error context AND auto_reveal_mode allows dimming
     local should_apply_general_dimming = false
     
-    if not is_cursor_in_block then
+    if not is_cursor_in_error_context then
       -- Apply general dimming if no other compression modes are active
       if not opts.fold_errors and opts.single_line_mode == "none" then
         should_apply_general_dimming = true
@@ -62,15 +82,37 @@ function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_ro
     if should_apply_general_dimming then
       M.dim_regular_block(bufnr, block, hl_group)
     end
+    
+    ::continue_regular::
   end
   
   -- Dim inline blocks with same logic
   for _, block in ipairs(inline_blocks) do
+    -- Validate block ranges
+    if not block or not block.if_start_row or not block.if_end_row or
+       block.if_start_row < 0 or block.if_end_row < block.if_start_row then
+      goto continue_inline
+    end
+    
     local is_cursor_in_block = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
+    
+    -- Check if cursor is on an error assignment that's related to this specific inline block
+    local cursor_on_related_assignment = false
+    for _, assignment in ipairs(error_assignments) do
+      if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
+        -- Check if this assignment is immediately before this error block (within a few lines)
+        if assignment.end_row < block.if_start_row and (block.if_start_row - assignment.end_row) <= 3 then
+          cursor_on_related_assignment = true
+          break
+        end
+      end
+    end
+    
+    local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
     
     local should_apply_general_dimming = false
     
-    if not is_cursor_in_block then
+    if not is_cursor_in_error_context then
       if not opts.fold_errors and opts.single_line_mode == "none" then
         should_apply_general_dimming = true
       end
@@ -83,6 +125,8 @@ function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_ro
     if should_apply_general_dimming then
       M.dim_inline_block(bufnr, block, hl_group)
     end
+    
+    ::continue_inline::
   end
 end
 
@@ -119,8 +163,22 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
 
   for _, block in ipairs(regular_blocks) do
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
+    
+    -- Check if cursor is on an error assignment that's related to this specific block
+    local cursor_on_related_assignment = false
+    for _, assignment in ipairs(error_assignments) do
+      if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
+        -- Check if this assignment is immediately before this error block (within a few lines)
+        if assignment.end_row < block.start_row and (block.start_row - assignment.end_row) <= 3 then
+          cursor_on_related_assignment = true
+          break
+        end
+      end
+    end
+    
+    local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
 
-    if not is_cursor_in_block then
+    if not is_cursor_in_error_context then
       -- Apply folding if enabled (takes priority)
       if opts.fold_errors then
         M.conceal_regular_block(bufnr, block)
@@ -132,7 +190,7 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
       -- "none" mode does nothing
       end
     else
-      -- Apply auto-reveal mode when cursor is inside block
+      -- Apply auto-reveal mode when cursor is in error context
       if opts.auto_reveal_mode == "normal" then
         -- Do nothing - fully reveal the block
       elseif opts.auto_reveal_mode == "comment" then
@@ -152,8 +210,22 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
 
   for _, block in ipairs(inline_blocks) do
     local is_cursor_in_if = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
+    
+    -- Check if cursor is on an error assignment that's related to this specific inline block
+    local cursor_on_related_assignment = false
+    for _, assignment in ipairs(error_assignments) do
+      if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
+        -- Check if this assignment is immediately before this error block (within a few lines)
+        if assignment.end_row < block.if_start_row and (block.if_start_row - assignment.end_row) <= 3 then
+          cursor_on_related_assignment = true
+          break
+        end
+      end
+    end
+    
+    local is_cursor_in_error_context = is_cursor_in_if or cursor_on_related_assignment
 
-    if not is_cursor_in_if then
+    if not is_cursor_in_error_context then
       -- Apply folding if enabled (takes priority)
       if opts.fold_errors then
         M.conceal_inline_block(bufnr, block)
@@ -165,7 +237,7 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
       -- "none" mode does nothing
       end
     else
-      -- Apply auto-reveal mode when cursor is inside block
+      -- Apply auto-reveal mode when cursor is in error context
       if opts.auto_reveal_mode == "normal" then
         -- Do nothing - fully reveal the block
       elseif opts.auto_reveal_mode == "comment" then

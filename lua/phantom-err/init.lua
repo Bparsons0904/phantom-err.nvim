@@ -131,5 +131,37 @@ function M.update_buffer_blocks(bufnr)
 end
 
 
+-- Debug function to inspect detected blocks
+function M.debug_blocks()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if vim.bo[bufnr].filetype ~= "go" then
+    print("Not a Go file")
+    return
+  end
+
+  local regular_blocks, inline_blocks, error_assignments = parser.find_error_blocks(bufnr)
+  
+  print("=== DEBUG: DETECTED BLOCKS ===")
+  print("Regular blocks:", #regular_blocks)
+  for i, block in ipairs(regular_blocks) do
+    print(string.format("  Block %d: lines %d-%d", i, block.start_row + 1, block.end_row + 1))
+    local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
+    print("    First line:", lines[1] or "")
+    print("    Last line:", lines[#lines] or "")
+  end
+  
+  print("Inline blocks:", #inline_blocks)
+  for i, block in ipairs(inline_blocks) do
+    print(string.format("  Inline %d: if=%d-%d, block=%d-%d", i, 
+      block.if_start_row + 1, block.if_end_row + 1,
+      block.block_start_row + 1, block.block_end_row + 1))
+  end
+  
+  print("Error assignments:", #error_assignments)
+  for i, assign in ipairs(error_assignments) do
+    print(string.format("  Assignment %d: lines %d-%d", i, assign.start_row + 1, assign.end_row + 1))
+  end
+end
+
 return M
 
