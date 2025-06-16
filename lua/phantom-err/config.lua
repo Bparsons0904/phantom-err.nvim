@@ -2,9 +2,24 @@ local M = {}
 
 -- Configuration for phantom-err.nvim
 -- Compresses or dims Go error handling blocks to reduce visual clutter
+
+-- Error handling utility
+local function log_error(module, message, level)
+  level = level or vim.log.levels.ERROR
+  vim.notify(string.format("phantom-err [%s]: %s", module, message), level)
+end
+
+local function log_warn(module, message)
+  log_error(module, message, vim.log.levels.WARN)
+end
+
+-- Export error handling functions
+M.log_error = log_error
+M.log_warn = log_warn
+
 M.defaults = {
   -- Automatically enable phantom-err when opening Go files
-  auto_enable = false,
+  auto_enable = true,
 
   -- Use folding to completely hide error blocks (most aggressive compression)
   fold_errors = true,
@@ -33,23 +48,34 @@ M.options = {}
 function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 
-  -- Validate config
-  local valid_single_line_modes = { "conceal", "comment", "none" }
-  if not vim.tbl_contains(valid_single_line_modes, M.options.single_line_mode) then
-    vim.notify("phantom-err: Invalid single_line_mode. Using 'conceal'", vim.log.levels.WARN)
-    M.options.single_line_mode = "conceal"
-  end
+  -- Validate config with proper type checking
+  M.validate_and_fix_option("single_line_mode", { "conceal", "comment", "none" }, "none")
+  M.validate_and_fix_option("auto_reveal_mode", { "normal", "comment", "conceal" }, "normal")
+  M.validate_and_fix_option("dimming_mode", { "conceal", "comment", "none" }, "conceal")
 
-  local valid_auto_reveal_modes = { "normal", "comment", "conceal" }
-  if not vim.tbl_contains(valid_auto_reveal_modes, M.options.auto_reveal_mode) then
-    vim.notify("phantom-err: Invalid auto_reveal_mode. Using 'normal'", vim.log.levels.WARN)
-    M.options.auto_reveal_mode = "normal"
-  end
+  -- Validate boolean options
+  M.validate_and_fix_boolean("auto_enable", true)
+  M.validate_and_fix_boolean("fold_errors", false)
+end
 
-  local valid_dimming_modes = { "conceal", "comment", "none" }
-  if not vim.tbl_contains(valid_dimming_modes, M.options.dimming_mode) then
-    vim.notify("phantom-err: Invalid dimming_mode. Using 'conceal'", vim.log.levels.WARN)
-    M.options.dimming_mode = "conceal"
+function M.validate_and_fix_option(option_name, valid_values, default_value)
+  local value = M.options[option_name]
+
+  -- Handle nil, non-string, or invalid values
+  if type(value) ~= "string" or not vim.tbl_contains(valid_values, value) then
+    local type_info = type(value) == "nil" and "nil" or string.format("'%s' (%s)", tostring(value), type(value))
+    log_warn("config", string.format("Invalid %s: %s. Using '%s'", option_name, type_info, default_value))
+    M.options[option_name] = default_value
+  end
+end
+
+function M.validate_and_fix_boolean(option_name, default_value)
+  local value = M.options[option_name]
+
+  if type(value) ~= "boolean" then
+    local type_info = type(value) == "nil" and "nil" or string.format("'%s' (%s)", tostring(value), type(value))
+    log_warn("config", string.format("Invalid %s: %s. Using %s", option_name, type_info, tostring(default_value)))
+    M.options[option_name] = default_value
   end
 end
 

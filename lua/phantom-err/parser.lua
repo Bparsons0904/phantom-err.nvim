@@ -1,5 +1,7 @@
 local M = {}
 
+local config = require("phantom-err.config")
+
 function M.find_error_blocks(bufnr)
   -- Validate buffer before parsing
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
@@ -8,11 +10,16 @@ function M.find_error_blocks(bufnr)
   
   local success, parser = pcall(vim.treesitter.get_parser, bufnr, 'go')
   if not success or not parser then
+    -- Only log tree-sitter availability issues, not buffer-specific parsing failures
+    if not success and parser and parser:match("no parser for") then
+      config.log_error("parser", "Go tree-sitter parser not available: " .. tostring(parser))
+    end
     return {}, {}, {}
   end
   
   local parse_success, trees = pcall(function() return parser:parse() end)
   if not parse_success or not trees or #trees == 0 then
+    -- Parse errors are usually due to invalid Go syntax - don't spam logs
     return {}, {}, {}
   end
   

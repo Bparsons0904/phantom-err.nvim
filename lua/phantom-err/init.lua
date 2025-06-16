@@ -5,6 +5,9 @@ local parser = require("phantom-err.parser")
 local display = require("phantom-err.display")
 local state = require("phantom-err.state")
 
+-- Track created autocmd groups to avoid cleanup errors
+local active_groups = {}
+
 function M.setup(opts)
   config.setup(opts)
   
@@ -67,9 +70,23 @@ function M.show()
   display.show_all(bufnr)
   state.set_enabled(bufnr, false)
   
-  -- Clean up autocmds
-  pcall(vim.api.nvim_del_augroup_by_name, "phantom_err_cursor_" .. bufnr)
-  pcall(vim.api.nvim_del_augroup_by_name, "phantom_err_changes_" .. bufnr)
+  -- Clean up autocmds only if they were created
+  M.cleanup_autocmds(bufnr)
+end
+
+function M.cleanup_autocmds(bufnr)
+  local cursor_group_name = "phantom_err_cursor_" .. bufnr
+  local change_group_name = "phantom_err_changes_" .. bufnr
+  
+  if active_groups[cursor_group_name] then
+    pcall(vim.api.nvim_del_augroup_by_name, cursor_group_name)
+    active_groups[cursor_group_name] = nil
+  end
+  
+  if active_groups[change_group_name] then
+    pcall(vim.api.nvim_del_augroup_by_name, change_group_name)
+    active_groups[change_group_name] = nil
+  end
 end
 
 function M.hide()
@@ -91,7 +108,9 @@ function M.update_buffer_blocks(bufnr)
     local last_cursor_row = -1
     
     -- Set up autocmd for cursor movement to update dimming
-    local cursor_group = vim.api.nvim_create_augroup("phantom_err_cursor_" .. bufnr, { clear = true })
+    local cursor_group_name = "phantom_err_cursor_" .. bufnr
+    local cursor_group = vim.api.nvim_create_augroup(cursor_group_name, { clear = true })
+    active_groups[cursor_group_name] = true
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       group = cursor_group,
       buffer = bufnr,
@@ -103,9 +122,13 @@ function M.update_buffer_blocks(bufnr)
         end
         
         if state.is_enabled(event_bufnr) then
-          local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1
+          local cursor_row = -1
+          local win = vim.fn.bufwinid(event_bufnr)
+          if win ~= -1 then
+            cursor_row = vim.api.nvim_win_get_cursor(win)[1] - 1
+          end
           -- Only update if cursor row actually changed
-          if cursor_row ~= last_cursor_row then
+          if cursor_row ~= last_cursor_row and cursor_row ~= -1 then
             last_cursor_row = cursor_row
             -- Re-parse on cursor move to get current blocks
             local current_regular, current_inline, current_assignments = parser.find_error_blocks(event_bufnr)
@@ -116,7 +139,9 @@ function M.update_buffer_blocks(bufnr)
     })
     
     -- Set up autocmd for buffer changes to re-parse and update
-    local change_group = vim.api.nvim_create_augroup("phantom_err_changes_" .. bufnr, { clear = true })
+    local change_group_name = "phantom_err_changes_" .. bufnr
+    local change_group = vim.api.nvim_create_augroup(change_group_name, { clear = true })
+    active_groups[change_group_name] = true
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       group = change_group,
       buffer = bufnr,

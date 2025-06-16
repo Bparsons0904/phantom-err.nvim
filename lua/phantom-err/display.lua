@@ -3,6 +3,9 @@ local M = {}
 local config = require("phantom-err.config")
 local namespace = vim.api.nvim_create_namespace("phantom-err")
 
+-- Module-local storage for fold texts to avoid global state pollution
+local fold_texts = {}
+
 function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
   if type(bufnr) ~= "number" or bufnr <= 0 then
     return
@@ -16,7 +19,11 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
   -- Wrap in pcall to prevent crashes from race conditions
   local success, result = pcall(function()
     -- Get current cursor position first to avoid unnecessary work
-    local cursor_row = vim.api.nvim_win_get_cursor(0)[1] - 1 -- Convert to 0-based
+    local cursor_row = -1
+    local win = vim.fn.bufwinid(bufnr)
+    if win ~= -1 then
+      cursor_row = vim.api.nvim_win_get_cursor(win)[1] - 1 -- Convert to 0-based
+    end
 
     M.clear_conceals(bufnr)
 
@@ -153,21 +160,16 @@ function M.clear_conceals(bufnr)
   -- Also clear any folds we created
   local win = vim.fn.bufwinid(bufnr)
   if win ~= -1 then
-    local current_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(win)
-
-    -- Clear all folds
-    vim.cmd("silent! normal! zE")
-
-    vim.api.nvim_set_current_win(current_win)
+    vim.api.nvim_win_call(win, function()
+      -- Clear all folds
+      vim.cmd("silent! normal! zE")
+    end)
   end
 
   -- Clear stored fold texts
-  if _G.phantom_err_fold_texts then
-    for key, _ in pairs(_G.phantom_err_fold_texts) do
-      if key:match("^" .. bufnr .. "_") then
-        _G.phantom_err_fold_texts[key] = nil
-      end
+  for key, _ in pairs(fold_texts) do
+    if key:match("^" .. bufnr .. "_") then
+      fold_texts[key] = nil
     end
   end
 end
@@ -267,70 +269,107 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
 end
 
 function M.compress_regular_block(bufnr, block)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
-  local compressed = M.compress_lines(lines)
+  -- Wrap entire operation in pcall to handle buffer invalidation
+  pcall(function()
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+      return
+    end
+    
+    local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
+    local compressed = M.compress_lines(lines)
 
-  -- Get the indentation of the first line to preserve alignment
-  local first_line = lines[1] or ""
-  local indent = first_line:match("^%s*") or ""
+    -- Get the indentation of the first line to preserve alignment
+    local first_line = lines[1] or ""
+    local indent = first_line:match("^%s*") or ""
 
-  -- Conceal the first line and show compressed version
-  local first_line_text = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1]
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
-    end_col = #first_line_text,
-    conceal = "",
-    virt_text = { { indent .. compressed, "Conceal" } },
-    virt_text_pos = "overlay",
-  })
+    -- Validate buffer again before setting extmarks
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
 
-  -- Make the remaining lines invisible by concealing them with no replacement
-  for row = block.start_row + 1, block.end_row do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      -- Conceal the entire line content
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = #line_text,
+    -- Conceal the first line and show compressed version
+    local first_line_text = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1]
+    if first_line_text then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, block.start_row, 0, {
+        end_col = #first_line_text,
         conceal = "",
-        hl_group = "Ignore", -- Make line invisible
+        virt_text = { { indent .. compressed, "Conceal" } },
+        virt_text_pos = "overlay",
       })
     end
-  end
+
+    -- Make the remaining lines invisible by concealing them with no replacement
+    for row = block.start_row + 1, block.end_row do
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        break
+      end
+      
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        -- Conceal the entire line content
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          conceal = "",
+          hl_group = "Ignore", -- Make line invisible
+        })
+      end
+    end
+  end)
 end
 
 function M.compress_inline_block(bufnr, block)
-  -- Extract only the block content (lines between { and })
-  local content_lines = vim.api.nvim_buf_get_lines(bufnr, block.block_start_row + 1, block.block_end_row, false)
-  local compressed = M.compress_lines(content_lines)
+  -- Wrap entire operation in pcall to handle buffer invalidation
+  pcall(function()
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+      return
+    end
+    
+    -- Extract only the block content (lines between { and })
+    local content_lines = vim.api.nvim_buf_get_lines(bufnr, block.block_start_row + 1, block.block_end_row, false)
+    local compressed = M.compress_lines(content_lines)
 
-  -- Get the indentation from the if line (same level as the opening brace)
-  local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
-  local if_indent = if_line:match("^%s*") or ""
+    -- Get the indentation from the if line (same level as the opening brace)
+    local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
+    local if_indent = if_line:match("^%s*") or ""
 
-  -- Show compressed content on the first line of block content (line after the {)
-  local first_content_line = vim.api.nvim_buf_get_lines(
-    bufnr,
-    block.block_start_row + 1,
-    block.block_start_row + 2,
-    false
-  )[1] or ""
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, block.block_start_row + 1, 0, {
-    end_col = #first_content_line,
-    conceal = "",
-    virt_text = { { if_indent .. compressed, "Conceal" } }, -- slight indent
-    virt_text_pos = "overlay",
-  })
+    -- Validate buffer again before setting extmarks
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
 
-  -- Hide the remaining block content lines (starting from the second content line)
-  for row = block.block_start_row + 2, block.block_end_row do
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-    if line_text and #line_text > 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
-        end_col = #line_text,
+    -- Show compressed content on the first line of block content (line after the {)
+    local first_content_line = vim.api.nvim_buf_get_lines(
+      bufnr,
+      block.block_start_row + 1,
+      block.block_start_row + 2,
+      false
+    )[1] or ""
+    
+    if first_content_line then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, block.block_start_row + 1, 0, {
+        end_col = #first_content_line,
         conceal = "",
-        hl_group = "Ignore",
+        virt_text = { { if_indent .. compressed, "Conceal" } }, -- slight indent
+        virt_text_pos = "overlay",
       })
     end
-  end
+
+    -- Hide the remaining block content lines (starting from the second content line)
+    for row = block.block_start_row + 2, block.block_end_row do
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        break
+      end
+      
+      local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if line_text and #line_text > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
+          end_col = #line_text,
+          conceal = "",
+          hl_group = "Ignore",
+        })
+      end
+    end
+  end)
 end
 
 function M.dim_regular_block(bufnr, block, hl_group)
@@ -411,22 +450,24 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
     return
   end
 
-  -- Switch to the buffer window temporarily
-  local current_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_set_current_win(win)
+  -- Use vim.api.nvim_win_call to avoid window focus issues
+  vim.api.nvim_win_call(win, function()
+    -- Set up manual folding if not already set
+    if vim.wo.foldmethod ~= "manual" then
+      vim.wo.foldmethod = "manual"
+    end
 
-  -- Set up manual folding if not already set
-  if vim.wo.foldmethod ~= "manual" then
-    vim.wo.foldmethod = "manual"
-  end
+    -- Convert to 1-based line numbers for vim commands
+    local fold_start = start_line + 1
+    local fold_end = end_line + 1
 
-  -- Convert to 1-based line numbers for vim commands
-  local fold_start = start_line + 1
-  local fold_end = end_line + 1
+    -- Create and close the fold
+    vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
+    vim.cmd(string.format("silent! %dfoldclose", fold_start))
 
-  -- Create and close the fold
-  vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
-  vim.cmd(string.format("silent! %dfoldclose", fold_start))
+    -- Set window-local foldtext function
+    vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
+  end)
 
   -- Set custom fold text using compressed content like the original
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)
@@ -437,31 +478,27 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
   local first_line_text = lines[1] or ""
   local indent = custom_indent or (first_line_text:match("^%s*") or "")
 
-  -- Store fold text globally so it can be accessed
-  if not _G.phantom_err_fold_texts then
-    _G.phantom_err_fold_texts = {}
-  end
-  _G.phantom_err_fold_texts[bufnr .. "_" .. start_line] = indent .. compressed .. " (" .. line_count .. " lines)"
-
-  -- Set window-local foldtext function
-  vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
-
-  -- Restore original window
-  vim.api.nvim_set_current_win(current_win)
+  -- Store fold text in module-local storage
+  fold_texts[bufnr .. "_" .. start_line] = indent .. compressed .. " (" .. line_count .. " lines)"
 end
 
--- Global function to get fold text
-function _G.phantom_err_get_fold_text()
+-- Module function to get fold text
+function M.get_fold_text()
   local bufnr = vim.api.nvim_get_current_buf()
   local line = vim.v.foldstart - 1 -- Convert to 0-based
   local key = bufnr .. "_" .. line
 
-  if _G.phantom_err_fold_texts and _G.phantom_err_fold_texts[key] then
-    return _G.phantom_err_fold_texts[key]
+  if fold_texts[key] then
+    return fold_texts[key]
   end
 
   -- Fallback to default fold text
   return "error handling"
+end
+
+-- Global function to get fold text (wrapper for module function)
+function _G.phantom_err_get_fold_text()
+  return require("phantom-err.display").get_fold_text()
 end
 
 -- Set up dimmed highlighting for fold text
