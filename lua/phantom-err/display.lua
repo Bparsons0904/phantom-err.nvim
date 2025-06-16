@@ -20,13 +20,70 @@ function M.hide_blocks(bufnr, regular_blocks, inline_blocks, error_assignments)
 
   local opts = config.get()
 
-  -- Always compress/conceal blocks - the mode determines how
+  -- Always compress/conceal blocks - the mode determines how (includes auto-reveal logic)
   M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cursor_row)
   M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, cursor_row)
+  
+  -- Apply general dimming to blocks where cursor is not present and no other modes applied
+  if opts.dimming_mode ~= "none" then
+    M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_row, opts.dimming_mode)
+  end
 end
 
 function M.show_all(bufnr)
   M.clear_conceals(bufnr)
+end
+
+function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, cursor_row, dimming_mode)
+  local hl_group = dimming_mode == "comment" and "Comment" or "Conceal"
+  local opts = config.get()
+  
+  -- Dim regular blocks only where no other processing occurred
+  for _, block in ipairs(regular_blocks) do
+    local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
+    
+    -- Only apply general dimming if:
+    -- 1. Cursor is not in block AND no compression modes applied (single_line_mode == "none", fold_errors == false)
+    -- 2. OR cursor is in block AND auto_reveal_mode allows dimming
+    local should_apply_general_dimming = false
+    
+    if not is_cursor_in_block then
+      -- Apply general dimming if no other compression modes are active
+      if not opts.fold_errors and opts.single_line_mode == "none" then
+        should_apply_general_dimming = true
+      end
+    else
+      -- Apply general dimming if auto_reveal_mode allows it
+      if opts.auto_reveal_mode == "comment" or opts.auto_reveal_mode == "conceal" then
+        should_apply_general_dimming = true
+      end
+    end
+    
+    if should_apply_general_dimming then
+      M.dim_regular_block(bufnr, block, hl_group)
+    end
+  end
+  
+  -- Dim inline blocks with same logic
+  for _, block in ipairs(inline_blocks) do
+    local is_cursor_in_block = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
+    
+    local should_apply_general_dimming = false
+    
+    if not is_cursor_in_block then
+      if not opts.fold_errors and opts.single_line_mode == "none" then
+        should_apply_general_dimming = true
+      end
+    else
+      if opts.auto_reveal_mode == "comment" or opts.auto_reveal_mode == "conceal" then
+        should_apply_general_dimming = true
+      end
+    end
+    
+    if should_apply_general_dimming then
+      M.dim_inline_block(bufnr, block, hl_group)
+    end
+  end
 end
 
 function M.clear_conceals(bufnr)

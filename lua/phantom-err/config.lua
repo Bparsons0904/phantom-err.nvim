@@ -7,19 +7,25 @@ M.defaults = {
   auto_enable = true,
 
   -- Use folding to completely hide error blocks (most aggressive compression)
-  fold_errors = false,
+  fold_errors = true,
 
   -- Single-line compression mode when cursor is not in error blocks:
   -- - "conceal": Compress to single line with overlay text
   -- - "comment": Just dim with Comment highlight
   -- - "none": No compression (only folding if fold_errors is true)
-  single_line_mode = "none",
+  single_line_mode = "conceal",
 
   -- How to display error blocks when cursor enters them:
   -- - "normal": Fully reveal the block (disable dimming/concealing)
   -- - "comment": Keep dimmed with Comment highlight
   -- - "conceal": Keep dimmed with Conceal highlight
-  auto_reveal_mode = "conceal",
+  auto_reveal_mode = "normal",
+
+  -- General dimming mode when plugin is active (independent of cursor position):
+  -- - "conceal": Dim all error blocks with Conceal highlight
+  -- - "comment": Dim all error blocks with Comment highlight
+  -- - "none": No general dimming (only compression/folding modes apply)
+  dimming_mode = "conceal",
 }
 
 M.options = {}
@@ -38,6 +44,12 @@ function M.setup(opts)
   if not vim.tbl_contains(valid_auto_reveal_modes, M.options.auto_reveal_mode) then
     vim.notify("phantom-err: Invalid auto_reveal_mode. Using 'normal'", vim.log.levels.WARN)
     M.options.auto_reveal_mode = "normal"
+  end
+
+  local valid_dimming_modes = { "conceal", "comment", "none" }
+  if not vim.tbl_contains(valid_dimming_modes, M.options.dimming_mode) then
+    vim.notify("phantom-err: Invalid dimming_mode. Using 'conceal'", vim.log.levels.WARN)
+    M.options.dimming_mode = "conceal"
   end
 end
 
