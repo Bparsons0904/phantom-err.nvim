@@ -4,16 +4,16 @@ local M = {}
 -- Compresses or dims Go error handling blocks to reduce visual clutter
 M.defaults = {
   -- Automatically enable phantom-err when opening Go files
-  auto_enable = true,
+  auto_enable = false,
 
   -- Use folding to completely hide error blocks (most aggressive compression)
-  fold_errors = true,
+  fold_errors = false,
 
   -- Single-line compression mode when cursor is not in error blocks:
   -- - "conceal": Compress to single line with overlay text
   -- - "comment": Just dim with Comment highlight
   -- - "none": No compression (only folding if fold_errors is true)
-  single_line_mode = "conceal",
+  single_line_mode = "none",
 
   -- How to display error blocks when cursor enters them:
   -- - "normal": Fully reveal the block (disable dimming/concealing)
