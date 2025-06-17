@@ -28,7 +28,7 @@ phantom-err.nvim preserves Go's excellent error handling semantics while dramati
 - **Flexible dimming**: Conceal or comment-style highlighting options
 - **Context-aware revealing**: Configurable behavior when cursor enters error blocks
 - **Pattern detection**: Handles both regular and inline error patterns
-- **Manual activation**: Use `:GoErrorToggle` to enable, or set `auto_enable = true` for automatic activation
+- **Manual activation**: Use `:PhantomToggle` to enable, or set `auto_enable = true` for automatic activation
 - **Real-time updates**: Responds to cursor movement and buffer changes
 - **Zero interference**: Works seamlessly with gopls, gofumpt, golangci-lint, and other Go tools
 
@@ -67,7 +67,7 @@ Plug 'Bparsons0904/phantom-err.nvim'
 lua require('phantom-err').setup()
 ```
 
-After installation, use `:GoErrorToggle` to enable the plugin for Go files.
+After installation, use `:PhantomToggle` to enable the plugin for Go files.
 
 ## Configuration
 
@@ -172,12 +172,14 @@ Automatically enables on Go files. Error blocks are always dimmed with comment h
 
 ## Commands
 
-| Command          | Description                      |
-| ---------------- | -------------------------------- |
-| `:GoErrorToggle` | Toggle error block visibility    |
-| `:GoErrorShow`   | Show all error blocks            |
-| `:GoErrorHide`   | Hide all error blocks            |
-| `:GoErrorHealth` | Run health check and diagnostics |
+| Command           | Description                             |
+| ----------------- | --------------------------------------- |
+| `:PhantomToggle`  | Toggle phantom error block effects     |
+| `:PhantomShow`    | Show all error blocks (disable effects)|
+| `:PhantomHide`    | Hide error blocks (enable effects)     |
+| `:PhantomHealth`  | Run health check and diagnostics       |
+| `:PhantomDebug`   | Show debug information                  |
+| `:PhantomLogLevel`| Get/set log level (debug, info, warn)  |
 
 ## Health Check
 
@@ -186,7 +188,7 @@ phantom-err.nvim includes a comprehensive health check to help troubleshoot setu
 ```vim
 :checkhealth phantom-err
 # or
-:GoErrorHealth
+:PhantomHealth
 ```
 
 The health check validates:

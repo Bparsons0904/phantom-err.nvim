@@ -19,55 +19,58 @@ local function safe_command(fn, command_name)
   end
 end
 
-vim.api.nvim_create_user_command("GoErrorToggle", safe_command(phantom_err.toggle, "toggle"), {
-  desc = "Toggle Go error handling visibility",
+vim.api.nvim_create_user_command("PhantomToggle", safe_command(phantom_err.toggle, "toggle"), {
+  desc = "Toggle phantom error block effects",
 })
 
-vim.api.nvim_create_user_command("GoErrorShow", safe_command(phantom_err.show, "show"), {
-  desc = "Show all Go error handling blocks",
+vim.api.nvim_create_user_command("PhantomShow", safe_command(phantom_err.show, "show"), {
+  desc = "Show all error blocks (disable phantom effects)",
 })
 
-vim.api.nvim_create_user_command("GoErrorHide", safe_command(phantom_err.hide, "hide"), {
-  desc = "Hide all Go error handling blocks",
+vim.api.nvim_create_user_command("PhantomHide", safe_command(phantom_err.hide, "hide"), {
+  desc = "Hide error blocks (enable phantom effects)",
 })
 
-vim.api.nvim_create_user_command("GoErrorTestConceal", safe_command(phantom_err.test_conceal, "test_conceal"), {
-  desc = "Test concealing functionality (proof of concept)",
-})
+-- Development/testing commands (can be removed in production)
+if vim.g.phantom_err_dev_mode then
+  vim.api.nvim_create_user_command("PhantomTestConceal", safe_command(phantom_err.test_conceal, "test_conceal"), {
+    desc = "[DEV] Test concealing functionality",
+  })
 
-vim.api.nvim_create_user_command(
-  "GoErrorTestConcealNoSyntax",
-  safe_command(phantom_err.test_conceal_no_syntax, "test_conceal_no_syntax"),
-  {
-    desc = "Test concealing without syntax highlighting",
-  }
-)
+  vim.api.nvim_create_user_command(
+    "PhantomTestConcealNoSyntax",
+    safe_command(phantom_err.test_conceal_no_syntax, "test_conceal_no_syntax"),
+    {
+      desc = "[DEV] Test concealing without syntax highlighting",
+    }
+  )
 
-vim.api.nvim_create_user_command(
-  "GoErrorTestCompression",
-  safe_command(phantom_err.test_line_compression, "test_line_compression"),
-  {
-    desc = "Test actual line compression using folds",
-  }
-)
+  vim.api.nvim_create_user_command(
+    "PhantomTestCompression",
+    safe_command(phantom_err.test_line_compression, "test_line_compression"),
+    {
+      desc = "[DEV] Test line compression using folds",
+    }
+  )
 
-vim.api.nvim_create_user_command(
-  "GoErrorTestAdvanced",
-  safe_command(phantom_err.test_advanced_concealing, "test_advanced_concealing"),
-  {
-    desc = "Test advanced conceal_lines from the guide",
-  }
-)
+  vim.api.nvim_create_user_command(
+    "PhantomTestAdvanced",
+    safe_command(phantom_err.test_advanced_concealing, "test_advanced_concealing"),
+    {
+      desc = "[DEV] Test advanced concealing techniques",
+    }
+  )
+end
 
 -- Health check command for easier discovery
-vim.api.nvim_create_user_command("GoErrorHealth", function()
+vim.api.nvim_create_user_command("PhantomHealth", function()
   vim.cmd("checkhealth phantom-err")
 end, {
   desc = "Run phantom-err health check",
 })
 
 -- Debug logging commands
-vim.api.nvim_create_user_command("GoErrorLogLevel", function(opts)
+vim.api.nvim_create_user_command("PhantomLogLevel", function(opts)
   local config = require("phantom-err.config")
   local level = opts.args
 
@@ -98,7 +101,7 @@ end, {
 })
 
 -- Debug command to show current state
-vim.api.nvim_create_user_command("GoErrorDebug", function()
+vim.api.nvim_create_user_command("PhantomDebug", function()
   local state = require("phantom-err.state")
   local info = state.get_debug_info()
 
@@ -129,7 +132,7 @@ end, {
 })
 
 -- Command to clear debug log
-vim.api.nvim_create_user_command("GoErrorLogClear", function()
+vim.api.nvim_create_user_command("PhantomLogClear", function()
   local log_file = "/tmp/phantom-err.log"
   local file = io.open(log_file, "w")
   if file then
@@ -143,7 +146,7 @@ end, {
 })
 
 -- Command to view debug log
-vim.api.nvim_create_user_command("GoErrorLogView", function()
+vim.api.nvim_create_user_command("PhantomLogView", function()
   vim.cmd("tabnew /tmp/phantom-err.log")
 end, {
   desc = "View phantom-err debug log",
