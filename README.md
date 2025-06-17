@@ -13,12 +13,15 @@ phantom-err.nvim preserves Go's excellent error handling semantics while dramati
 ## Examples
 
 ### Full Mode with Conceal Dimming and Normal Reveal
+
 ![image](https://github.com/user-attachments/assets/b93f49d7-b8f1-4a05-aca8-88cb2a60190c)
 
 ### Compress Mode with Comment Dimming and Normal Reveal
+
 ![image](https://github.com/user-attachments/assets/f69aa105-417f-4ea2-b5b5-e2072a75a15a)
 
 ### Fold Mode with Conceal Reveal
+
 ![image](https://github.com/user-attachments/assets/ea888e66-191e-482a-ab2d-77b2e035f9f9)
 
 ## Features
@@ -173,14 +176,25 @@ Automatically enables on Go files. Error blocks are always dimmed with comment h
 
 ## Commands
 
-| Command           | Description                             |
-| ----------------- | --------------------------------------- |
-| `:PhantomToggle`  | Toggle phantom error block effects     |
-| `:PhantomShow`    | Show all error blocks (disable effects)|
-| `:PhantomHide`    | Hide error blocks (enable effects)     |
-| `:PhantomHealth`  | Run health check and diagnostics       |
-| `:PhantomDebug`   | Show debug information                  |
-| `:PhantomLogLevel`| Get/set log level (debug, info, warn)  |
+| Command            | Description                             |
+| ------------------ | --------------------------------------- |
+| `:PhantomToggle`   | Toggle phantom error block effects      |
+| `:PhantomShow`     | Show all error blocks (disable effects) |
+| `:PhantomHide`     | Hide error blocks (enable effects)      |
+| `:PhantomHealth`   | Run health check and diagnostics        |
+| `:PhantomDebug`    | Show debug information                  |
+| `:PhantomLogLevel` | Get/set log level (debug, info, warn)   |
+
+### Suggested Key Bindings
+
+For quick access to phantom-err commands, consider adding these keymaps to your configuration:
+
+```lua
+-- Phantom-err keybindings
+vim.keymap.set('n', '<leader>pt', ':PhantomToggle<CR>', { desc = 'Toggle phantom-err' })
+vim.keymap.set('n', '<leader>ph', ':PhantomHide<CR>', { desc = 'Hide error blocks' })
+vim.keymap.set('n', '<leader>ps', ':PhantomShow<CR>', { desc = 'Show error blocks' })
+```
 
 ## Health Check
 
