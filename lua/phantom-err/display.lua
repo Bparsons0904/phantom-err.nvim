@@ -8,7 +8,7 @@ local namespace = vim.api.nvim_create_namespace("phantom-err")
 local fold_texts = {}
 
 -- Constants
-local MAX_ASSIGNMENT_DISTANCE = 3  -- Maximum lines between assignment and error block to consider them related
+local MAX_ASSIGNMENT_DISTANCE = 3 -- Maximum lines between assignment and error block to consider them related
 
 -- Helper function to check if cursor is on a related assignment
 local function is_cursor_on_related_assignment(cursor_row, error_assignments, block_start_row)
@@ -27,14 +27,19 @@ end
 local function get_all_cursor_positions_for_buffer(bufnr)
   local cursor_positions = {}
   local enabled_windows = state.get_enabled_windows_for_buffer(bufnr)
-  
+
+  config.log_debug("display", string.format("Getting cursor positions for buffer %d from %d windows: %s", 
+    bufnr, #enabled_windows, vim.inspect(enabled_windows)))
+
   for _, winid in ipairs(enabled_windows) do
     local cursor_row = state.get_current_cursor_row(winid)
+    config.log_debug("display", string.format("Window %d cursor: %d", winid, cursor_row))
     if cursor_row >= 0 then
       cursor_positions[#cursor_positions + 1] = cursor_row
     end
   end
-  
+
+  config.log_debug("display", string.format("All cursor positions: %s", vim.inspect(cursor_positions)))
   return cursor_positions
 end
 
@@ -43,15 +48,22 @@ local function is_any_cursor_in_error_context(cursor_positions, block_start_row,
   for _, cursor_row in ipairs(cursor_positions) do
     -- Check if cursor is in the block
     local is_cursor_in_block = cursor_row >= block_start_row and cursor_row <= block_end_row
-    
+
     -- Check if cursor is on a related assignment
     local cursor_on_related_assignment = is_cursor_on_related_assignment(cursor_row, error_assignments, block_start_row)
-    
+
+    config.log_debug("display", string.format(
+      "Cursor check: cursor_row=%d, block=%d-%d, in_block=%s, on_assignment=%s",
+      cursor_row, block_start_row, block_end_row, tostring(is_cursor_in_block), tostring(cursor_on_related_assignment)
+    ))
+
     if is_cursor_in_block or cursor_on_related_assignment then
+      config.log_debug("display", string.format("Cursor %d IS in error context for block %d-%d", cursor_row, block_start_row, block_end_row))
       return true
     end
   end
-  
+
+  config.log_debug("display", string.format("No cursor in error context for block %d-%d", block_start_row, block_end_row))
   return false
 end
 
@@ -67,15 +79,23 @@ function M.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_as
     config.log_debug("display", string.format("Buffer %d for window %d is invalid or not loaded", bufnr, winid))
     return
   end
-  
-  config.log_debug("display", string.format("Hiding blocks for window %d (buffer %d): %d regular, %d inline", 
-    winid, bufnr, #regular_blocks, #inline_blocks))
+
+  config.log_debug(
+    "display",
+    string.format(
+      "Hiding blocks for window %d (buffer %d): %d regular, %d inline",
+      winid,
+      bufnr,
+      #regular_blocks,
+      #inline_blocks
+    )
+  )
 
   -- Wrap in pcall to prevent crashes from race conditions
   local success, result = pcall(function()
     -- Get cursor position for this specific window
     local cursor_row = state.get_current_cursor_row(winid)
-    
+
     -- Update our tracked cursor position
     state.set_cursor_position(winid, cursor_row)
 
@@ -87,17 +107,33 @@ function M.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_as
 
     -- Get cursor positions from ALL windows viewing this buffer
     local all_cursor_positions = get_all_cursor_positions_for_buffer(bufnr)
-    
+
     -- Special handling for multiple windows: ensure effects are properly coordinated
     local enabled_windows = state.get_enabled_windows_for_buffer(bufnr)
-    
-    -- Apply compression/concealing based on ALL cursor positions
+
+    -- Apply mode-based display based on ALL cursor positions
     M.compress_regular_blocks_multi_cursor(bufnr, regular_blocks, error_assignments, all_cursor_positions)
     M.compress_inline_blocks_multi_cursor(bufnr, inline_blocks, error_assignments, all_cursor_positions)
-    
-    -- Apply general dimming based on ALL cursor positions
-    if opts.dimming_mode ~= "none" then
-      M.apply_general_dimming_multi_cursor(bufnr, regular_blocks, inline_blocks, error_assignments, all_cursor_positions, opts.dimming_mode)
+
+    -- Apply general dimming for full mode when dimming is enabled
+    if opts.mode == "full" and opts.dimming_mode ~= "none" then
+      config.log_debug("display", string.format(
+        "Applying general dimming for FULL mode: dimming_mode=%s, regular_blocks=%d, inline_blocks=%d",
+        opts.dimming_mode, #regular_blocks, #inline_blocks
+      ))
+      M.apply_general_dimming_multi_cursor(
+        bufnr,
+        regular_blocks,
+        inline_blocks,
+        error_assignments,
+        all_cursor_positions,
+        opts.dimming_mode
+      )
+    else
+      config.log_debug("display", string.format(
+        "Skipping general dimming: mode=%s (dimming only applies to 'full' mode), dimming_mode=%s",
+        opts.mode, opts.dimming_mode
+      ))
     end
   end)
 
@@ -125,68 +161,76 @@ function M.show_all(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return
   end
-  
+
   pcall(M.clear_conceals, bufnr)
 end
 
--- Helper function to determine if general dimming should be applied
+-- Helper function to determine if dimming should be applied based on new config structure
 local function should_apply_dimming(is_cursor_in_error_context, opts)
-  if not is_cursor_in_error_context then
-    -- Apply general dimming if no other compression modes are active
-    return not opts.fold_errors and opts.single_line_mode == "none"
+  if opts.dimming_mode == "none" then
+    return false
+  end
+
+  if is_cursor_in_error_context then
+    -- When cursor IS in error context, apply dimming based on reveal_mode
+    return opts.reveal_mode == "comment" or opts.reveal_mode == "conceal"
   else
-    -- Apply general dimming if auto_reveal_mode allows it
-    return opts.auto_reveal_mode == "comment" or opts.auto_reveal_mode == "conceal"
+    -- Apply dimming when cursor is NOT in error context, but only for full mode
+    -- (fold and compressed modes handle their own styling)
+    return opts.mode == "full"
   end
 end
 
 -- Helper function to validate block ranges for regular blocks
 local function is_valid_regular_block(block)
-  return block and block.start_row and block.end_row and
-         block.start_row >= 0 and block.end_row >= block.start_row
+  return block and block.start_row and block.end_row and block.start_row >= 0 and block.end_row >= block.start_row
 end
 
--- Helper function to validate block ranges for inline blocks  
+-- Helper function to validate block ranges for inline blocks
 local function is_valid_inline_block(block)
-  return block and block.if_start_row and block.if_end_row and
-         block.if_start_row >= 0 and block.if_end_row >= block.if_start_row
+  return block
+    and block.if_start_row
+    and block.if_end_row
+    and block.if_start_row >= 0
+    and block.if_end_row >= block.if_start_row
 end
 
 function M.apply_general_dimming(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_row, dimming_mode)
   local hl_group = dimming_mode == "comment" and "Comment" or "Conceal"
   local opts = config.get()
-  
+
   -- Dim regular blocks only where no other processing occurred
   for _, block in ipairs(regular_blocks) do
     if not is_valid_regular_block(block) then
       goto continue_regular
     end
-    
+
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
     local cursor_on_related_assignment = is_cursor_on_related_assignment(cursor_row, error_assignments, block.start_row)
     local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
-    
+
     if should_apply_dimming(is_cursor_in_error_context, opts) then
       M.dim_regular_block(bufnr, block, hl_group)
     end
-    
+
     ::continue_regular::
   end
-  
+
   -- Dim inline blocks with same logic
   for _, block in ipairs(inline_blocks) do
     if not is_valid_inline_block(block) then
       goto continue_inline
     end
-    
+
     local is_cursor_in_block = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
-    local cursor_on_related_assignment = is_cursor_on_related_assignment(cursor_row, error_assignments, block.if_start_row)
+    local cursor_on_related_assignment =
+      is_cursor_on_related_assignment(cursor_row, error_assignments, block.if_start_row)
     local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
-    
+
     if should_apply_dimming(is_cursor_in_error_context, opts) then
       M.dim_inline_block(bufnr, block, hl_group)
     end
-    
+
     ::continue_inline::
   end
 end
@@ -220,13 +264,13 @@ function M.clear_folds_for_block(bufnr, start_row, end_row)
         -- Convert to 1-based line numbers for vim commands
         local fold_start = start_row + 1
         local fold_end = end_row + 1
-        
+
         -- Open any folds in this range
         vim.cmd(string.format("silent! %d,%dfoldopen!", fold_start, fold_end))
       end)
     end
   end
-  
+
   -- Clear stored fold texts for this block
   for key, _ in pairs(fold_texts) do
     if key:match("^" .. bufnr .. "_" .. start_row .. "$") then
@@ -243,39 +287,38 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
 
   for _, block in ipairs(regular_blocks) do
     local is_cursor_in_block = cursor_row >= block.start_row and cursor_row <= block.end_row
-    
+
     -- Check if cursor is on an error assignment that's related to this specific block
     local cursor_on_related_assignment = false
     for _, assignment in ipairs(error_assignments) do
       if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
         -- Check if this assignment is immediately before this error block (within a few lines)
-        if assignment.end_row < block.start_row and (block.start_row - assignment.end_row) <= MAX_ASSIGNMENT_DISTANCE then
+        if
+          assignment.end_row < block.start_row and (block.start_row - assignment.end_row) <= MAX_ASSIGNMENT_DISTANCE
+        then
           cursor_on_related_assignment = true
           break
         end
       end
     end
-    
+
     local is_cursor_in_error_context = is_cursor_in_block or cursor_on_related_assignment
 
     if not is_cursor_in_error_context then
-      -- Apply folding if enabled (takes priority)
-      if opts.fold_errors then
+      -- Apply mode-based display when cursor is not in error context
+      if opts.mode == "fold" then
+        M.fold_regular_block(bufnr, block)
+      elseif opts.mode == "compressed" then
         M.conceal_regular_block(bufnr, block)
-      -- Otherwise apply single-line compression mode  
-      elseif opts.single_line_mode == "conceal" then
-        M.compress_regular_block(bufnr, block)
-      elseif opts.single_line_mode == "comment" then
-        M.dim_regular_block(bufnr, block, "Comment")
-      -- "none" mode does nothing
+      -- "full" mode does nothing here - dimming is handled separately
       end
     else
-      -- Apply auto-reveal mode when cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
+      -- Apply reveal mode when cursor is in error context
+      if opts.reveal_mode == "normal" then
         -- Do nothing - fully reveal the block
-      elseif opts.auto_reveal_mode == "comment" then
+      elseif opts.reveal_mode == "comment" then
         M.dim_regular_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
+      elseif opts.reveal_mode == "conceal" then
         M.dim_regular_block(bufnr, block, "Conceal")
       end
     end
@@ -290,39 +333,39 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
 
   for _, block in ipairs(inline_blocks) do
     local is_cursor_in_if = cursor_row >= block.if_start_row and cursor_row <= block.if_end_row
-    
+
     -- Check if cursor is on an error assignment that's related to this specific inline block
     local cursor_on_related_assignment = false
     for _, assignment in ipairs(error_assignments) do
       if cursor_row >= assignment.start_row and cursor_row <= assignment.end_row then
         -- Check if this assignment is immediately before this error block (within a few lines)
-        if assignment.end_row < block.if_start_row and (block.if_start_row - assignment.end_row) <= MAX_ASSIGNMENT_DISTANCE then
+        if
+          assignment.end_row < block.if_start_row
+          and (block.if_start_row - assignment.end_row) <= MAX_ASSIGNMENT_DISTANCE
+        then
           cursor_on_related_assignment = true
           break
         end
       end
     end
-    
+
     local is_cursor_in_error_context = is_cursor_in_if or cursor_on_related_assignment
 
     if not is_cursor_in_error_context then
-      -- Apply folding if enabled (takes priority)
-      if opts.fold_errors then
+      -- Apply mode-based display when cursor is not in error context
+      if opts.mode == "fold" then
+        M.fold_inline_block(bufnr, block)
+      elseif opts.mode == "compressed" then
         M.conceal_inline_block(bufnr, block)
-      -- Otherwise apply single-line compression mode
-      elseif opts.single_line_mode == "conceal" then
-        M.compress_inline_block(bufnr, block)
-      elseif opts.single_line_mode == "comment" then
-        M.dim_inline_block(bufnr, block, "Comment")
-      -- "none" mode does nothing
+      -- "full" mode does nothing here - dimming is handled separately
       end
     else
-      -- Apply auto-reveal mode when cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
+      -- Apply reveal mode when cursor is in error context
+      if opts.reveal_mode == "normal" then
         -- Do nothing - fully reveal the block
-      elseif opts.auto_reveal_mode == "comment" then
+      elseif opts.reveal_mode == "comment" then
         M.dim_inline_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
+      elseif opts.reveal_mode == "conceal" then
         M.dim_inline_block(bufnr, block, "Conceal")
       end
     end
@@ -338,30 +381,28 @@ function M.compress_regular_blocks_multi_cursor(bufnr, regular_blocks, error_ass
 
   for _, block in ipairs(regular_blocks) do
     -- Check if ANY cursor is in error context for this block
-    local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
-      cursor_positions, block.start_row, block.end_row, error_assignments)
+    local is_any_cursor_in_error_context =
+      is_any_cursor_in_error_context(cursor_positions, block.start_row, block.end_row, error_assignments)
 
     -- REVERSED LOGIC: If any cursor is in the error context, fully reveal the block
     -- This ensures that when ANY window has cursor in error context, the block is revealed
     if is_any_cursor_in_error_context then
-      -- Apply auto-reveal mode when ANY cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
+      -- Apply reveal mode when ANY cursor is in error context
+      if opts.reveal_mode == "normal" then
         -- Actively clear any folds for this block to ensure it's fully revealed
         M.clear_folds_for_block(bufnr, block.start_row, block.end_row)
-      elseif opts.auto_reveal_mode == "comment" then
+      elseif opts.reveal_mode == "comment" then
         M.dim_regular_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
+      elseif opts.reveal_mode == "conceal" then
         M.dim_regular_block(bufnr, block, "Conceal")
       end
     else
-      -- Apply folding/compression when NO cursor is in error context
-      if opts.fold_errors then
+      -- Apply mode-based display when NO cursor is in error context
+      if opts.mode == "fold" then
+        M.fold_regular_block(bufnr, block)
+      elseif opts.mode == "compressed" then
         M.conceal_regular_block(bufnr, block)
-      -- Otherwise apply single-line compression mode  
-      elseif opts.single_line_mode == "conceal" then
-        M.compress_regular_block(bufnr, block)
-      elseif opts.single_line_mode == "comment" then
-        M.dim_regular_block(bufnr, block, "Comment")
+      -- "full" mode does nothing here - dimming is handled separately
       end
     end
   end
@@ -376,68 +417,82 @@ function M.compress_inline_blocks_multi_cursor(bufnr, inline_blocks, error_assig
 
   for _, block in ipairs(inline_blocks) do
     -- Check if ANY cursor is in error context for this block
-    local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
-      cursor_positions, block.if_start_row, block.if_end_row, error_assignments)
+    local is_any_cursor_in_error_context =
+      is_any_cursor_in_error_context(cursor_positions, block.if_start_row, block.if_end_row, error_assignments)
 
     -- REVERSED LOGIC: If any cursor is in the error context, fully reveal the block
     if is_any_cursor_in_error_context then
-      -- Apply auto-reveal mode when ANY cursor is in error context
-      if opts.auto_reveal_mode == "normal" then
+      -- Apply reveal mode when ANY cursor is in error context
+      if opts.reveal_mode == "normal" then
         -- Actively clear any folds for this block to ensure it's fully revealed
         M.clear_folds_for_block(bufnr, block.block_start_row + 1, block.block_end_row)
-      elseif opts.auto_reveal_mode == "comment" then
+      elseif opts.reveal_mode == "comment" then
         M.dim_inline_block(bufnr, block, "Comment")
-      elseif opts.auto_reveal_mode == "conceal" then
+      elseif opts.reveal_mode == "conceal" then
         M.dim_inline_block(bufnr, block, "Conceal")
       end
     else
-      -- Apply folding/compression when NO cursor is in error context
-      if opts.fold_errors then
+      -- Apply mode-based display when NO cursor is in error context
+      if opts.mode == "fold" then
+        M.fold_inline_block(bufnr, block)
+      elseif opts.mode == "compressed" then
         M.conceal_inline_block(bufnr, block)
-      -- Otherwise apply single-line compression mode
-      elseif opts.single_line_mode == "conceal" then
-        M.compress_inline_block(bufnr, block)
-      elseif opts.single_line_mode == "comment" then
-        M.dim_inline_block(bufnr, block, "Comment")
+      -- "full" mode does nothing here - dimming is handled separately
       end
     end
   end
 end
 
 -- Multi-cursor version of apply_general_dimming
-function M.apply_general_dimming_multi_cursor(bufnr, regular_blocks, inline_blocks, error_assignments, cursor_positions, dimming_mode)
+function M.apply_general_dimming_multi_cursor(
+  bufnr,
+  regular_blocks,
+  inline_blocks,
+  error_assignments,
+  cursor_positions,
+  dimming_mode
+)
   local hl_group = dimming_mode == "comment" and "Comment" or "Conceal"
   local opts = config.get()
-  
+
   -- Dim regular blocks only where no other processing occurred
   for _, block in ipairs(regular_blocks) do
     if not is_valid_regular_block(block) then
       goto continue_regular
     end
-    
-    local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
-      cursor_positions, block.start_row, block.end_row, error_assignments)
-    
-    if should_apply_dimming(not is_any_cursor_in_error_context, opts) then
+
+    local is_any_cursor_in_error_context =
+      is_any_cursor_in_error_context(cursor_positions, block.start_row, block.end_row, error_assignments)
+
+    local should_dim = should_apply_dimming(is_any_cursor_in_error_context, opts)
+    config.log_debug("display", string.format(
+      "Regular block %d-%d: cursor_in_context=%s, should_dim=%s, mode=%s, dimming_mode=%s, reveal_mode=%s, cursor_positions=%s",
+      block.start_row, block.end_row, tostring(is_any_cursor_in_error_context), tostring(should_dim),
+      opts.mode, opts.dimming_mode, opts.reveal_mode, vim.inspect(cursor_positions)
+    ))
+    if should_dim then
+      config.log_debug("display", string.format("DIMMING regular block %d-%d with %s", block.start_row, block.end_row, hl_group))
       M.dim_regular_block(bufnr, block, hl_group)
+    else
+      config.log_debug("display", string.format("NOT DIMMING regular block %d-%d", block.start_row, block.end_row))
     end
-    
+
     ::continue_regular::
   end
-  
+
   -- Dim inline blocks with same logic
   for _, block in ipairs(inline_blocks) do
     if not is_valid_inline_block(block) then
       goto continue_inline
     end
-    
-    local is_any_cursor_in_error_context = is_any_cursor_in_error_context(
-      cursor_positions, block.if_start_row, block.if_end_row, error_assignments)
-    
-    if should_apply_dimming(not is_any_cursor_in_error_context, opts) then
+
+    local is_any_cursor_in_error_context =
+      is_any_cursor_in_error_context(cursor_positions, block.if_start_row, block.if_end_row, error_assignments)
+
+    if should_apply_dimming(is_any_cursor_in_error_context, opts) then
       M.dim_inline_block(bufnr, block, hl_group)
     end
-    
+
     ::continue_inline::
   end
 end
@@ -448,7 +503,7 @@ function M.compress_regular_block(bufnr, block)
     if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
       return
     end
-    
+
     local lines = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.end_row + 1, false)
     local compressed = M.compress_lines(lines)
 
@@ -477,7 +532,7 @@ function M.compress_regular_block(bufnr, block)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         break
       end
-      
+
       local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
       if line_text and #line_text > 0 then
         -- Conceal the entire line content
@@ -497,7 +552,7 @@ function M.compress_inline_block(bufnr, block)
     if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
       return
     end
-    
+
     -- Extract only the block content (lines between { and })
     local content_lines = vim.api.nvim_buf_get_lines(bufnr, block.block_start_row + 1, block.block_end_row, false)
     local compressed = M.compress_lines(content_lines)
@@ -518,7 +573,7 @@ function M.compress_inline_block(bufnr, block)
       block.block_start_row + 2,
       false
     )[1] or ""
-    
+
     if first_content_line then
       vim.api.nvim_buf_set_extmark(bufnr, namespace, block.block_start_row + 1, 0, {
         end_col = #first_content_line,
@@ -533,7 +588,7 @@ function M.compress_inline_block(bufnr, block)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         break
       end
-      
+
       local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
       if line_text and #line_text > 0 then
         vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
@@ -550,14 +605,14 @@ function M.dim_regular_block(bufnr, block, hl_group)
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return
   end
-  
+
   -- Show the full block content but with dimmed highlighting
   for row = block.start_row, block.end_row do
     pcall(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
-      
+
       local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
       if line_text and #line_text > 0 then
         vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
@@ -573,14 +628,14 @@ function M.dim_inline_block(bufnr, block, hl_group)
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return
   end
-  
+
   -- For inline blocks, only dim the content inside the {} block, not the if line
   for row = block.block_start_row + 1, block.block_end_row - 1 do
     pcall(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
-      
+
       local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
       if line_text and #line_text > 0 then
         vim.api.nvim_buf_set_extmark(bufnr, namespace, row, 0, {
@@ -592,17 +647,25 @@ function M.dim_inline_block(bufnr, block, hl_group)
   end
 end
 
+-- Pure folding with no text (fold mode)
+function M.fold_regular_block(bufnr, block)
+  M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, "")
+end
+
+function M.fold_inline_block(bufnr, block)
+  M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, "")
+end
+
+-- Folding with compressed text (compressed mode)
 function M.conceal_regular_block(bufnr, block)
-  -- Use the proper conceal_lines technique from advanced guide
   local first_line = vim.api.nvim_buf_get_lines(bufnr, block.start_row, block.start_row + 1, false)[1] or ""
   local base_indent = first_line:match("^%s*") or ""
   M.hide_error_block_advanced(bufnr, block.start_row, block.end_row, base_indent .. " ")
 end
 
 function M.conceal_inline_block(bufnr, block)
-  -- For inline blocks, conceal content including the closing brace
   local if_line = vim.api.nvim_buf_get_lines(bufnr, block.if_start_row, block.if_start_row + 1, false)[1] or ""
-  local if_indent = if_line:match("^%s*") or ""  
+  local if_indent = if_line:match("^%s*") or ""
   M.hide_error_block_advanced(bufnr, block.block_start_row + 1, block.block_end_row, if_indent .. " ")
 end
 
@@ -614,7 +677,7 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
 
   -- Set up dimmed highlighting on first use
   M.setup_fold_highlighting()
-  
+
   -- Configure fillchars to remove trailing dots from folds
   vim.wo.fillchars = "fold: "
 
@@ -643,17 +706,22 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
     end
   end
 
-  -- Set custom fold text using compressed content like the original
-  local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)
-  local compressed = M.compress_lines(lines)
-  local line_count = end_line - start_line + 1
-
-  -- Get the indentation of the first line to preserve alignment
-  local first_line_text = lines[1] or ""
-  local indent = custom_indent or (first_line_text:match("^%s*") or "")
-
-  -- Store fold text in module-local storage
-  fold_texts[bufnr .. "_" .. start_line] = indent .. compressed .. " (" .. line_count .. " lines)"
+  -- Set custom fold text - empty for pure folding, compressed for compressed mode
+  if custom_indent == "" then
+    -- Pure folding mode - no text
+    fold_texts[bufnr .. "_" .. start_line] = ""
+  else
+    -- Compressed mode - show compressed content
+    local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)
+    local compressed = M.compress_lines(lines)
+    local line_count = end_line - start_line + 1
+    
+    -- Get the indentation of the first line to preserve alignment
+    local first_line_text = lines[1] or ""
+    local indent = custom_indent or (first_line_text:match("^%s*") or "")
+    
+    fold_texts[bufnr .. "_" .. start_line] = indent .. compressed .. " (" .. line_count .. " lines)"
+  end
 end
 
 -- Module function to get fold text
@@ -687,8 +755,6 @@ function M.setup_fold_highlighting()
     link = "PhantomErrFold",
   })
 end
-
-
 
 function M.compress_lines(lines)
   local result = {}

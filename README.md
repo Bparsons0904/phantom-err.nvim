@@ -12,24 +12,23 @@ phantom-err.nvim preserves Go's excellent error handling semantics while dramati
 
 ## Examples
 
-### Fold On w/ Concealed Single Line
+### Compressed Mode with Conceal Dimming
 
 ![image](https://github.com/user-attachments/assets/276ce741-7040-4b42-96f2-31ee499b0fa0)
 
-### Fold and Single Line Off
+### Fold Mode with Conceal Dimming
 
 ![image](https://github.com/user-attachments/assets/cbbc98c3-f16d-4ec8-b25b-bbc079b25d80)
-
-### Too many others to list
 
 ## Features
 
 - **Visual-only changes**: Buffer content remains unchanged for formatters/LSP compatibility
 - **Native folding**: Uses Neovim's folding system for true line compression
-- **Multiple display modes**: Folding, virtual text overlay, and dimming options
+- **Three display modes**: Pure folding, compressed view, or full view with dimming
+- **Flexible dimming**: Conceal or comment-style highlighting options
 - **Context-aware revealing**: Configurable behavior when cursor enters error blocks
 - **Pattern detection**: Handles both regular and inline error patterns
-- **Auto-enable**: Automatically activates on Go files
+- **Manual activation**: Use `:GoErrorToggle` to enable, or set `auto_enable = true` for automatic activation
 - **Real-time updates**: Responds to cursor movement and buffer changes
 - **Zero interference**: Works seamlessly with gopls, gofumpt, golangci-lint, and other Go tools
 
@@ -63,7 +62,12 @@ use {
 
 ```vim
 Plug 'Bparsons0904/phantom-err.nvim'
+
+" Add to your init.vim or init.lua:
+lua require('phantom-err').setup()
 ```
+
+After installation, use `:GoErrorToggle` to enable the plugin for Go files.
 
 ## Configuration
 
@@ -74,69 +78,106 @@ require('phantom-err').setup({
   -- Automatically enable phantom-err when opening Go files
   auto_enable = false,
 
-  -- Use folding to completely hide error blocks (most aggressive compression)
-  fold_errors = true,
+  -- Display mode for error blocks:
+  -- - "fold": Use folding to completely hide error blocks (most aggressive)
+  -- - "compressed": Compress error blocks to single line with overlay text
+  -- - "full": Show full error blocks (apply dimming only)
+  mode = "compressed",
 
-  -- Single-line compression mode when cursor is not in error blocks:
-  -- - "conceal": Compress to single line with overlay text
-  -- - "comment": Just dim with Comment highlight
-  -- - "none": No compression (only folding if fold_errors is true)
-  single_line_mode = "conceal",
-
-  -- General dimming mode when plugin is active (independent of cursor position):
-  -- - "conceal": Dim all error blocks with Conceal highlight
-  -- - "comment": Dim all error blocks with Comment highlight
-  -- - "none": No general dimming (only compression/folding modes apply)
+  -- Dimming mode applied to error blocks:
+  -- - "conceal": Dim with Conceal highlight group
+  -- - "comment": Dim with Comment highlight group
+  -- - "none": No dimming applied
   dimming_mode = "conceal",
 
-  -- How to display error blocks when cursor enters them:
+  -- How to display error blocks when cursor enters them (reveal mode):
   -- - "normal": Fully reveal the block (disable dimming/concealing)
   -- - "comment": Keep dimmed with Comment highlight
   -- - "conceal": Keep dimmed with Conceal highlight
-  auto_reveal_mode = "normal",
+  reveal_mode = "normal",
 })
 ```
 
 ### Display Modes
 
-The plugin uses a layered approach with multiple display modes that can work together:
+phantom-err.nvim uses a clear, mode-based configuration system:
 
-#### `fold_errors: true` (Primary Mode)
+#### `mode` (Primary Display Behavior)
 
-Uses Neovim's native folding to completely compress multi-line blocks into single lines:
+Controls how error blocks are displayed when the cursor is not in them:
 
-```go
-if err != nil { log.Error("failed", err); return err } (3 lines)
-```
+- **`"fold"`**: Pure folding with no text - completely hides error blocks
+- **`"compressed"`**: Folding with compressed text overlay showing condensed content:
+  ```go
+  if err != nil { log.Error("failed", err); return err } (3 lines)
+  ```
+- **`"full"`**: Shows full error blocks with dimming applied
 
-#### `single_line_mode` (Secondary Mode)
+#### `dimming_mode` (Visual Styling)
 
-When folding is disabled or as a fallback:
+Controls the highlight applied to error blocks:
 
-- **`"conceal"`**: Compresses blocks using virtual text overlay
-- **`"comment"`**: Dims blocks with Comment highlighting
-- **`"none"`**: No compression
+- **`"conceal"`**: Dims with Conceal highlight group (subtle dimming)
+- **`"comment"`**: Dims with Comment highlight group (more visible dimming)
+- **`"none"`**: No dimming applied
 
-#### `auto_reveal_mode` (Cursor Context)
+#### `reveal_mode` (Cursor Context Behavior)
 
-Controls behavior when cursor is within an error block:
+Controls what happens when the cursor enters an error block:
 
-- **`"normal"`**: Fully reveals the block
+- **`"normal"`**: Fully reveals the block (removes all dimming/concealing)
 - **`"comment"`**: Keeps block dimmed with Comment highlight
 - **`"conceal"`**: Keeps block dimmed with Conceal highlight
 
-#### `dimming_mode` (General Styling)
+### Example Configurations
 
-Applies consistent dimming across all error blocks when no other modes are active.
+#### Auto-Enable with Minimal Visual Impact
+
+```lua
+require('phantom-err').setup({
+  auto_enable = true,
+  mode = "full",
+  dimming_mode = "comment",
+  reveal_mode = "normal",
+})
+```
+
+Automatically enables on Go files. Error blocks are shown in full but dimmed with comment highlighting. Fully revealed when cursor enters a block.
+
+#### Maximum Compression
+
+```lua
+require('phantom-err').setup({
+  auto_enable = true,
+  mode = "fold",
+  dimming_mode = "none",
+  reveal_mode = "normal",
+})
+```
+
+Automatically enables on Go files. Error blocks are completely hidden. Fully revealed when cursor enters a block.
+
+#### Always Dimmed (Even When Cursor Inside)
+
+```lua
+require('phantom-err').setup({
+  auto_enable = true,
+  mode = "full",
+  dimming_mode = "comment",
+  reveal_mode = "comment",
+})
+```
+
+Automatically enables on Go files. Error blocks are always dimmed with comment highlighting, even when cursor is inside the block.
 
 ## Commands
 
-| Command          | Description                         |
-| ---------------- | ----------------------------------- |
-| `:GoErrorToggle` | Toggle error block visibility       |
-| `:GoErrorShow`   | Show all error blocks               |
-| `:GoErrorHide`   | Hide all error blocks               |
-| `:GoErrorHealth` | Run health check and diagnostics    |
+| Command          | Description                      |
+| ---------------- | -------------------------------- |
+| `:GoErrorToggle` | Toggle error block visibility    |
+| `:GoErrorShow`   | Show all error blocks            |
+| `:GoErrorHide`   | Hide all error blocks            |
+| `:GoErrorHealth` | Run health check and diagnostics |
 
 ## Health Check
 
@@ -151,7 +192,7 @@ phantom-err.nvim includes a comprehensive health check to help troubleshoot setu
 The health check validates:
 
 - **Core Requirements**: Neovim version, tree-sitter installation
-- **Go Parser**: tree-sitter Go parser availability and functionality 
+- **Go Parser**: tree-sitter Go parser availability and functionality
 - **Module Loading**: All plugin modules load correctly
 - **Configuration**: Current settings and validation
 - **Environment**: conceallevel, filetype detection, performance considerations

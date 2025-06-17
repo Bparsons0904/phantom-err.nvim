@@ -75,7 +75,7 @@ func main() {
 	}
 
 	fmt.Printf("Successfully processed user: %s\n", user.Name)
-	
+
 	// Complex inline error handling case - should only dim the error handling content
 	subAccountID := "test-account"
 	var priorMeetings []Meeting
@@ -103,9 +103,9 @@ type User struct {
 
 type Meeting struct {
 	ID                 string
-	EndTime           *string
-	Type              string
-	SubAccountID      string
+	EndTime            *string
+	Type               string
+	SubAccountID       string
 	MeetingPeriodStart string
 }
 
@@ -173,30 +173,39 @@ type Database struct {
 
 type DatabaseORM struct{}
 
-func (db *DatabaseORM) Scopes(scope func()) *DatabaseORM { return db }
+func (db *DatabaseORM) Scopes(scope func()) *DatabaseORM                     { return db }
 func (db *DatabaseORM) Where(query string, args ...interface{}) *DatabaseORM { return db }
-func (db *DatabaseORM) Order(order string) *DatabaseORM { return db }
-func (db *DatabaseORM) Find(dest interface{}) *DatabaseResult { return &DatabaseResult{} }
+func (db *DatabaseORM) Order(order string) *DatabaseORM                      { return db }
+
+func (db *DatabaseORM) Find(
+	dest interface{},
+) *DatabaseResult {
+	return &DatabaseResult{}
+}
 
 type DatabaseResult struct {
 	Error error
 }
 
-type FiberContext struct{}
-type FiberMap map[string]interface{}
+type (
+	FiberContext struct{}
+	FiberMap     map[string]interface{}
+)
 
 func (c *FiberContext) Status(code int) *FiberContext { return c }
-func (c *FiberContext) JSON(data interface{}) error { return nil }
+func (c *FiberContext) JSON(data interface{}) error   { return nil }
 
-var database = Database{DB: &DatabaseORM{}}
-var c = &FiberContext{}
+var (
+	database = Database{DB: &DatabaseORM{}}
+	c        = &FiberContext{}
+)
 
 func WithQSMMeetingRelations() {}
 
 var fiber = struct {
 	StatusInternalServerError int
-	Map                      func(map[string]interface{}) FiberMap
+	Map                       func(map[string]interface{}) FiberMap
 }{
 	StatusInternalServerError: 500,
-	Map: func(m map[string]interface{}) FiberMap { return FiberMap(m) },
+	Map:                       func(m map[string]interface{}) FiberMap { return FiberMap(m) },
 }
