@@ -12,13 +12,14 @@ phantom-err.nvim preserves Go's excellent error handling semantics while dramati
 
 ## Examples
 
-### Compressed Mode with Conceal Dimming
+### Full Mode with Conceal Dimming and Normal Reveal
+![image](https://github.com/user-attachments/assets/b93f49d7-b8f1-4a05-aca8-88cb2a60190c)
 
-![image](https://github.com/user-attachments/assets/276ce741-7040-4b42-96f2-31ee499b0fa0)
+### Compress Mode with Comment Dimming and Normal Reveal
+![image](https://github.com/user-attachments/assets/f69aa105-417f-4ea2-b5b5-e2072a75a15a)
 
-### Fold Mode with Conceal Dimming
-
-![image](https://github.com/user-attachments/assets/cbbc98c3-f16d-4ec8-b25b-bbc079b25d80)
+### Fold Mode with Conceal Reveal
+![image](https://github.com/user-attachments/assets/ea888e66-191e-482a-ab2d-77b2e035f9f9)
 
 ## Features
 
