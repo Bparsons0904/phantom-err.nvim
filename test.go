@@ -72,6 +72,8 @@ func main() {
 		rollbackChanges(user.ID)
 		cleanup()
 		return
+	} else {
+		fmt.Printf("Successfully saved user data for user: %s\n", user.Name)
 	}
 
 	fmt.Printf("Successfully processed user: %s\n", user.Name)

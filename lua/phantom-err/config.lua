@@ -77,7 +77,7 @@ M.defaults = {
   -- - "fold": Use folding to completely hide error blocks (most aggressive)
   -- - "compressed": Compress error blocks to single line with overlay text
   -- - "full": Show full error blocks (apply dimming only)
-  mode = "compressed",
+  mode = "full",
 
   -- Dimming mode applied to error blocks:
   -- - "conceal": Dim with Conceal highlight group
