@@ -28,8 +28,15 @@ local function get_all_cursor_positions_for_buffer(bufnr)
   local cursor_positions = {}
   local enabled_windows = state.get_enabled_windows_for_buffer(bufnr)
 
-  config.log_debug("display", string.format("Getting cursor positions for buffer %d from %d windows: %s", 
-    bufnr, #enabled_windows, vim.inspect(enabled_windows)))
+  config.log_debug(
+    "display",
+    string.format(
+      "Getting cursor positions for buffer %d from %d windows: %s",
+      bufnr,
+      #enabled_windows,
+      vim.inspect(enabled_windows)
+    )
+  )
 
   for _, winid in ipairs(enabled_windows) do
     local cursor_row = state.get_current_cursor_row(winid)
@@ -52,18 +59,31 @@ local function is_any_cursor_in_error_context(cursor_positions, block_start_row,
     -- Check if cursor is on a related assignment
     local cursor_on_related_assignment = is_cursor_on_related_assignment(cursor_row, error_assignments, block_start_row)
 
-    config.log_debug("display", string.format(
-      "Cursor check: cursor_row=%d, block=%d-%d, in_block=%s, on_assignment=%s",
-      cursor_row, block_start_row, block_end_row, tostring(is_cursor_in_block), tostring(cursor_on_related_assignment)
-    ))
+    config.log_debug(
+      "display",
+      string.format(
+        "Cursor check: cursor_row=%d, block=%d-%d, in_block=%s, on_assignment=%s",
+        cursor_row,
+        block_start_row,
+        block_end_row,
+        tostring(is_cursor_in_block),
+        tostring(cursor_on_related_assignment)
+      )
+    )
 
     if is_cursor_in_block or cursor_on_related_assignment then
-      config.log_debug("display", string.format("Cursor %d IS in error context for block %d-%d", cursor_row, block_start_row, block_end_row))
+      config.log_debug(
+        "display",
+        string.format("Cursor %d IS in error context for block %d-%d", cursor_row, block_start_row, block_end_row)
+      )
       return true
     end
   end
 
-  config.log_debug("display", string.format("No cursor in error context for block %d-%d", block_start_row, block_end_row))
+  config.log_debug(
+    "display",
+    string.format("No cursor in error context for block %d-%d", block_start_row, block_end_row)
+  )
   return false
 end
 
@@ -117,10 +137,15 @@ function M.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_as
 
     -- Apply general dimming for full mode when dimming is enabled
     if opts.mode == "full" and opts.dimming_mode ~= "none" then
-      config.log_debug("display", string.format(
-        "Applying general dimming for FULL mode: dimming_mode=%s, regular_blocks=%d, inline_blocks=%d",
-        opts.dimming_mode, #regular_blocks, #inline_blocks
-      ))
+      config.log_debug(
+        "display",
+        string.format(
+          "Applying general dimming for FULL mode: dimming_mode=%s, regular_blocks=%d, inline_blocks=%d",
+          opts.dimming_mode,
+          #regular_blocks,
+          #inline_blocks
+        )
+      )
       M.apply_general_dimming_multi_cursor(
         bufnr,
         regular_blocks,
@@ -130,10 +155,14 @@ function M.hide_blocks_for_window(winid, regular_blocks, inline_blocks, error_as
         opts.dimming_mode
       )
     else
-      config.log_debug("display", string.format(
-        "Skipping general dimming: mode=%s (dimming only applies to 'full' mode), dimming_mode=%s",
-        opts.mode, opts.dimming_mode
-      ))
+      config.log_debug(
+        "display",
+        string.format(
+          "Skipping general dimming: mode=%s (dimming only applies to 'full' mode), dimming_mode=%s",
+          opts.mode,
+          opts.dimming_mode
+        )
+      )
     end
   end)
 
@@ -310,7 +339,7 @@ function M.compress_regular_blocks(bufnr, regular_blocks, error_assignments, cur
         M.fold_regular_block(bufnr, block)
       elseif opts.mode == "compressed" then
         M.conceal_regular_block(bufnr, block)
-      -- "full" mode does nothing here - dimming is handled separately
+        -- "full" mode does nothing here - dimming is handled separately
       end
     else
       -- Apply reveal mode when cursor is in error context
@@ -357,7 +386,7 @@ function M.compress_inline_blocks(bufnr, inline_blocks, error_assignments, curso
         M.fold_inline_block(bufnr, block)
       elseif opts.mode == "compressed" then
         M.conceal_inline_block(bufnr, block)
-      -- "full" mode does nothing here - dimming is handled separately
+        -- "full" mode does nothing here - dimming is handled separately
       end
     else
       -- Apply reveal mode when cursor is in error context
@@ -402,7 +431,7 @@ function M.compress_regular_blocks_multi_cursor(bufnr, regular_blocks, error_ass
         M.fold_regular_block(bufnr, block)
       elseif opts.mode == "compressed" then
         M.conceal_regular_block(bufnr, block)
-      -- "full" mode does nothing here - dimming is handled separately
+        -- "full" mode does nothing here - dimming is handled separately
       end
     end
   end
@@ -437,7 +466,7 @@ function M.compress_inline_blocks_multi_cursor(bufnr, inline_blocks, error_assig
         M.fold_inline_block(bufnr, block)
       elseif opts.mode == "compressed" then
         M.conceal_inline_block(bufnr, block)
-      -- "full" mode does nothing here - dimming is handled separately
+        -- "full" mode does nothing here - dimming is handled separately
       end
     end
   end
@@ -465,13 +494,25 @@ function M.apply_general_dimming_multi_cursor(
       is_any_cursor_in_error_context(cursor_positions, block.start_row, block.end_row, error_assignments)
 
     local should_dim = should_apply_dimming(is_any_cursor_in_error_context, opts)
-    config.log_debug("display", string.format(
-      "Regular block %d-%d: cursor_in_context=%s, should_dim=%s, mode=%s, dimming_mode=%s, reveal_mode=%s, cursor_positions=%s",
-      block.start_row, block.end_row, tostring(is_any_cursor_in_error_context), tostring(should_dim),
-      opts.mode, opts.dimming_mode, opts.reveal_mode, vim.inspect(cursor_positions)
-    ))
+    config.log_debug(
+      "display",
+      string.format(
+        "Regular block %d-%d: cursor_in_context=%s, should_dim=%s, mode=%s, dimming_mode=%s, reveal_mode=%s, cursor_positions=%s",
+        block.start_row,
+        block.end_row,
+        tostring(is_any_cursor_in_error_context),
+        tostring(should_dim),
+        opts.mode,
+        opts.dimming_mode,
+        opts.reveal_mode,
+        vim.inspect(cursor_positions)
+      )
+    )
     if should_dim then
-      config.log_debug("display", string.format("DIMMING regular block %d-%d with %s", block.start_row, block.end_row, hl_group))
+      config.log_debug(
+        "display",
+        string.format("DIMMING regular block %d-%d with %s", block.start_row, block.end_row, hl_group)
+      )
       M.dim_regular_block(bufnr, block, hl_group)
     else
       config.log_debug("display", string.format("NOT DIMMING regular block %d-%d", block.start_row, block.end_row))
@@ -715,11 +756,11 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
     local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, end_line + 1, false)
     local compressed = M.compress_lines(lines)
     local line_count = end_line - start_line + 1
-    
+
     -- Get the indentation of the first line to preserve alignment
     local first_line_text = lines[1] or ""
     local indent = custom_indent or (first_line_text:match("^%s*") or "")
-    
+
     fold_texts[bufnr .. "_" .. start_line] = indent .. compressed .. " (" .. line_count .. " lines)"
   end
 end

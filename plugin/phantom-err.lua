@@ -3,9 +3,9 @@ if vim.g.loaded_phantom_err then
 end
 vim.g.loaded_phantom_err = 1
 
-local ok, phantom_err = pcall(require, 'phantom-err')
+local ok, phantom_err = pcall(require, "phantom-err")
 if not ok then
-  vim.notify('phantom-err [loader]: Failed to load module: ' .. phantom_err, vim.log.levels.ERROR)
+  vim.notify("phantom-err [loader]: Failed to load module: " .. phantom_err, vim.log.levels.ERROR)
   return
 end
 
@@ -14,56 +14,68 @@ local function safe_command(fn, command_name)
   return function()
     local success, error_msg = pcall(fn)
     if not success then
-      vim.notify(string.format('phantom-err [%s]: %s', command_name, error_msg), vim.log.levels.ERROR)
+      vim.notify(string.format("phantom-err [%s]: %s", command_name, error_msg), vim.log.levels.ERROR)
     end
   end
 end
 
-vim.api.nvim_create_user_command('GoErrorToggle', safe_command(phantom_err.toggle, 'toggle'), {
-  desc = 'Toggle Go error handling visibility'
+vim.api.nvim_create_user_command("GoErrorToggle", safe_command(phantom_err.toggle, "toggle"), {
+  desc = "Toggle Go error handling visibility",
 })
 
-vim.api.nvim_create_user_command('GoErrorShow', safe_command(phantom_err.show, 'show'), {
-  desc = 'Show all Go error handling blocks'
+vim.api.nvim_create_user_command("GoErrorShow", safe_command(phantom_err.show, "show"), {
+  desc = "Show all Go error handling blocks",
 })
 
-vim.api.nvim_create_user_command('GoErrorHide', safe_command(phantom_err.hide, 'hide'), {
-  desc = 'Hide all Go error handling blocks'
+vim.api.nvim_create_user_command("GoErrorHide", safe_command(phantom_err.hide, "hide"), {
+  desc = "Hide all Go error handling blocks",
 })
 
-vim.api.nvim_create_user_command('GoErrorTestConceal', safe_command(phantom_err.test_conceal, 'test_conceal'), {
-  desc = 'Test concealing functionality (proof of concept)'
+vim.api.nvim_create_user_command("GoErrorTestConceal", safe_command(phantom_err.test_conceal, "test_conceal"), {
+  desc = "Test concealing functionality (proof of concept)",
 })
 
-vim.api.nvim_create_user_command('GoErrorTestConcealNoSyntax', safe_command(phantom_err.test_conceal_no_syntax, 'test_conceal_no_syntax'), {
-  desc = 'Test concealing without syntax highlighting'
-})
+vim.api.nvim_create_user_command(
+  "GoErrorTestConcealNoSyntax",
+  safe_command(phantom_err.test_conceal_no_syntax, "test_conceal_no_syntax"),
+  {
+    desc = "Test concealing without syntax highlighting",
+  }
+)
 
-vim.api.nvim_create_user_command('GoErrorTestCompression', safe_command(phantom_err.test_line_compression, 'test_line_compression'), {
-  desc = 'Test actual line compression using folds'
-})
+vim.api.nvim_create_user_command(
+  "GoErrorTestCompression",
+  safe_command(phantom_err.test_line_compression, "test_line_compression"),
+  {
+    desc = "Test actual line compression using folds",
+  }
+)
 
-vim.api.nvim_create_user_command('GoErrorTestAdvanced', safe_command(phantom_err.test_advanced_concealing, 'test_advanced_concealing'), {
-  desc = 'Test advanced conceal_lines from the guide'
-})
+vim.api.nvim_create_user_command(
+  "GoErrorTestAdvanced",
+  safe_command(phantom_err.test_advanced_concealing, "test_advanced_concealing"),
+  {
+    desc = "Test advanced conceal_lines from the guide",
+  }
+)
 
 -- Health check command for easier discovery
-vim.api.nvim_create_user_command('GoErrorHealth', function()
-  vim.cmd('checkhealth phantom-err')
+vim.api.nvim_create_user_command("GoErrorHealth", function()
+  vim.cmd("checkhealth phantom-err")
 end, {
-  desc = 'Run phantom-err health check'
+  desc = "Run phantom-err health check",
 })
 
 -- Debug logging commands
-vim.api.nvim_create_user_command('GoErrorLogLevel', function(opts)
-  local config = require('phantom-err.config')
+vim.api.nvim_create_user_command("GoErrorLogLevel", function(opts)
+  local config = require("phantom-err.config")
   local level = opts.args
-  
+
   if level == "" then
     -- Show current log level
     local current = config.get().log_level
     vim.notify('phantom-err: Current log level is "' .. current .. '"', vim.log.levels.INFO)
-    vim.notify('Available levels: debug, info, warn, error, off', vim.log.levels.INFO)
+    vim.notify("Available levels: debug, info, warn, error, off", vim.log.levels.INFO)
   else
     -- Set new log level
     local valid_levels = { "debug", "info", "warn", "error", "off" }
@@ -71,65 +83,69 @@ vim.api.nvim_create_user_command('GoErrorLogLevel', function(opts)
       config.get().log_level = level
       vim.notify('phantom-err: Log level set to "' .. level .. '"', vim.log.levels.INFO)
     else
-      vim.notify('phantom-err: Invalid log level "' .. level .. '". Valid levels: ' .. table.concat(valid_levels, ', '), vim.log.levels.ERROR)
+      vim.notify(
+        'phantom-err: Invalid log level "' .. level .. '". Valid levels: ' .. table.concat(valid_levels, ", "),
+        vim.log.levels.ERROR
+      )
     end
   end
 end, {
-  desc = 'Get or set phantom-err log level',
-  nargs = '?',
+  desc = "Get or set phantom-err log level",
+  nargs = "?",
   complete = function()
     return { "debug", "info", "warn", "error", "off" }
-  end
+  end,
 })
 
 -- Debug command to show current state
-vim.api.nvim_create_user_command('GoErrorDebug', function()
-  local state = require('phantom-err.state')
+vim.api.nvim_create_user_command("GoErrorDebug", function()
+  local state = require("phantom-err.state")
   local info = state.get_debug_info()
-  
-  print('=== PHANTOM-ERR DEBUG ===')
-  print('Total windows tracked: ' .. info.total_tracked_windows)
-  print('Valid windows: ' .. info.valid_windows)
-  print('Enabled windows: ' .. info.enabled_windows)
-  print('Cursor positions tracked: ' .. info.cursor_positions_tracked)
-  
+
+  print("=== PHANTOM-ERR DEBUG ===")
+  print("Total windows tracked: " .. info.total_tracked_windows)
+  print("Valid windows: " .. info.valid_windows)
+  print("Enabled windows: " .. info.enabled_windows)
+  print("Cursor positions tracked: " .. info.cursor_positions_tracked)
+
   -- Show current window status
   local current_win = vim.api.nvim_get_current_win()
   local current_buf = vim.api.nvim_get_current_buf()
   local is_enabled = state.is_enabled(current_win)
   local cursor_pos = state.get_cursor_position(current_win)
-  
-  print('Current window: ' .. current_win)
-  print('Current buffer: ' .. current_buf)
-  print('Buffer filetype: ' .. vim.bo[current_buf].filetype)
-  print('Window enabled: ' .. tostring(is_enabled))
-  print('Cursor position: ' .. cursor_pos)
-  
+
+  print("Current window: " .. current_win)
+  print("Current buffer: " .. current_buf)
+  print("Buffer filetype: " .. vim.bo[current_buf].filetype)
+  print("Window enabled: " .. tostring(is_enabled))
+  print("Cursor position: " .. cursor_pos)
+
   local enabled_windows = state.get_enabled_windows_for_buffer(current_buf)
-  print('Enabled windows for buffer: [' .. table.concat(enabled_windows, ', ') .. ']')
-  
-  vim.notify('phantom-err Debug Info printed to console', vim.log.levels.INFO)
+  print("Enabled windows for buffer: [" .. table.concat(enabled_windows, ", ") .. "]")
+
+  vim.notify("phantom-err Debug Info printed to console", vim.log.levels.INFO)
 end, {
-  desc = 'Show phantom-err debug information'
+  desc = "Show phantom-err debug information",
 })
 
 -- Command to clear debug log
-vim.api.nvim_create_user_command('GoErrorLogClear', function()
+vim.api.nvim_create_user_command("GoErrorLogClear", function()
   local log_file = "/tmp/phantom-err.log"
   local file = io.open(log_file, "w")
   if file then
     file:close()
-    vim.notify('phantom-err: Debug log cleared', vim.log.levels.INFO)
+    vim.notify("phantom-err: Debug log cleared", vim.log.levels.INFO)
   else
-    vim.notify('phantom-err: Failed to clear debug log', vim.log.levels.ERROR)
+    vim.notify("phantom-err: Failed to clear debug log", vim.log.levels.ERROR)
   end
 end, {
-  desc = 'Clear phantom-err debug log'
+  desc = "Clear phantom-err debug log",
 })
 
 -- Command to view debug log
-vim.api.nvim_create_user_command('GoErrorLogView', function()
-  vim.cmd('tabnew /tmp/phantom-err.log')
+vim.api.nvim_create_user_command("GoErrorLogView", function()
+  vim.cmd("tabnew /tmp/phantom-err.log")
 end, {
-  desc = 'View phantom-err debug log'
+  desc = "View phantom-err debug log",
 })
+
