@@ -4,6 +4,45 @@ local config = require("phantom-err.config")
 local state = require("phantom-err.state")
 local namespace = vim.api.nvim_create_namespace("phantom-err")
 
+-- Helper function to preserve cursor position during fold operations
+local function with_cursor_preserved(winid, fn)
+  if not vim.api.nvim_win_is_valid(winid) then
+    return
+  end
+
+  local success, cursor = pcall(vim.api.nvim_win_get_cursor, winid)
+  if not success then
+    fn()
+    return
+  end
+
+  local saved_cursor = { cursor[1], cursor[2] }
+  local saved_view = {}
+
+  -- Save the current view state
+  pcall(function()
+    vim.api.nvim_win_call(winid, function()
+      saved_view = vim.fn.winsaveview()
+    end)
+  end)
+
+  fn()
+
+  -- Restore cursor position and view
+  pcall(function()
+    if vim.api.nvim_win_is_valid(winid) then
+      vim.api.nvim_win_call(winid, function()
+        -- First restore the view (scroll position, etc.)
+        if saved_view and next(saved_view) then
+          vim.fn.winrestview(saved_view)
+        end
+        -- Then ensure cursor is at the right position
+        vim.api.nvim_win_set_cursor(winid, saved_cursor)
+      end)
+    end
+  end)
+end
+
 -- Module-local storage for fold texts to avoid global state pollution
 local fold_texts = {}
 
@@ -201,7 +240,7 @@ function M.cleanup_buffer_before_close(bufnr)
   end
 
   config.log_debug("display", string.format("Cleaning up buffer %d before close", bufnr))
-  
+
   -- Clear all extmarks (conceals, dimming, etc.)
   pcall(function()
     vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
@@ -212,12 +251,14 @@ function M.cleanup_buffer_before_close(bufnr)
     local wins = vim.fn.win_findbuf(bufnr)
     for _, win in ipairs(wins) do
       if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_call(win, function()
-          -- Clear all folds
-          vim.cmd("silent! normal! zE")
-          -- Reset fold settings to defaults
-          vim.wo.foldmethod = "manual"
-          vim.wo.foldtext = ""
+        with_cursor_preserved(win, function()
+          vim.api.nvim_win_call(win, function()
+            -- Clear all folds
+            vim.cmd("silent! normal! zE")
+            -- Reset fold settings to defaults
+            vim.wo.foldmethod = "manual"
+            vim.wo.foldtext = ""
+          end)
         end)
       end
     end
@@ -306,13 +347,17 @@ end
 function M.clear_conceals(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
 
-  -- Also clear any folds we created
-  local win = vim.fn.bufwinid(bufnr)
-  if win ~= -1 then
-    vim.api.nvim_win_call(win, function()
-      -- Clear all folds
-      vim.cmd("silent! normal! zE")
-    end)
+  -- Also clear any folds we created from ALL windows viewing this buffer
+  local wins = vim.fn.win_findbuf(bufnr)
+  for _, win in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(win) then
+      with_cursor_preserved(win, function()
+        vim.api.nvim_win_call(win, function()
+          -- Clear all folds
+          vim.cmd("silent! normal! zE")
+        end)
+      end)
+    end
   end
 
   -- Clear stored fold texts
@@ -328,13 +373,15 @@ function M.clear_folds_for_block(bufnr, start_row, end_row)
   local wins = vim.fn.win_findbuf(bufnr)
   for _, win in ipairs(wins) do
     if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_call(win, function()
-        -- Convert to 1-based line numbers for vim commands
-        local fold_start = start_row + 1
-        local fold_end = end_row + 1
+      with_cursor_preserved(win, function()
+        vim.api.nvim_win_call(win, function()
+          -- Convert to 1-based line numbers for vim commands
+          local fold_start = start_row + 1
+          local fold_end = end_row + 1
 
-        -- Open any folds in this range
-        vim.cmd(string.format("silent! %d,%dfoldopen!", fold_start, fold_end))
+          -- Open any folds in this range
+          vim.cmd(string.format("silent! %d,%dfoldopen!", fold_start, fold_end))
+        end)
       end)
     end
   end
@@ -765,23 +812,25 @@ function M.hide_error_block_advanced(bufnr, start_line, end_line, custom_indent)
   local wins = vim.fn.win_findbuf(bufnr)
   for _, win in ipairs(wins) do
     if vim.api.nvim_win_is_valid(win) then
-      -- Use vim.api.nvim_win_call to avoid window focus issues
-      vim.api.nvim_win_call(win, function()
-        -- Set up manual folding if not already set
-        if vim.wo.foldmethod ~= "manual" then
-          vim.wo.foldmethod = "manual"
-        end
+      with_cursor_preserved(win, function()
+        -- Use vim.api.nvim_win_call to avoid window focus issues
+        vim.api.nvim_win_call(win, function()
+          -- Set up manual folding if not already set
+          if vim.wo.foldmethod ~= "manual" then
+            vim.wo.foldmethod = "manual"
+          end
 
-        -- Convert to 1-based line numbers for vim commands
-        local fold_start = start_line + 1
-        local fold_end = end_line + 1
+          -- Convert to 1-based line numbers for vim commands
+          local fold_start = start_line + 1
+          local fold_end = end_line + 1
 
-        -- Create and close the fold
-        vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
-        vim.cmd(string.format("silent! %dfoldclose", fold_start))
+          -- Create and close the fold
+          vim.cmd(string.format("silent! %d,%dfold", fold_start, fold_end))
+          vim.cmd(string.format("silent! %dfoldclose", fold_start))
 
-        -- Set window-local foldtext function
-        vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
+          -- Set window-local foldtext function
+          vim.wo.foldtext = "v:lua.phantom_err_get_fold_text()"
+        end)
       end)
     end
   end
