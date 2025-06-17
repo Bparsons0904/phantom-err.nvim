@@ -31,37 +31,6 @@ vim.api.nvim_create_user_command("PhantomHide", safe_command(phantom_err.hide, "
   desc = "Hide error blocks (enable phantom effects)",
 })
 
--- Development/testing commands (can be removed in production)
-if vim.g.phantom_err_dev_mode then
-  vim.api.nvim_create_user_command("PhantomTestConceal", safe_command(phantom_err.test_conceal, "test_conceal"), {
-    desc = "[DEV] Test concealing functionality",
-  })
-
-  vim.api.nvim_create_user_command(
-    "PhantomTestConcealNoSyntax",
-    safe_command(phantom_err.test_conceal_no_syntax, "test_conceal_no_syntax"),
-    {
-      desc = "[DEV] Test concealing without syntax highlighting",
-    }
-  )
-
-  vim.api.nvim_create_user_command(
-    "PhantomTestCompression",
-    safe_command(phantom_err.test_line_compression, "test_line_compression"),
-    {
-      desc = "[DEV] Test line compression using folds",
-    }
-  )
-
-  vim.api.nvim_create_user_command(
-    "PhantomTestAdvanced",
-    safe_command(phantom_err.test_advanced_concealing, "test_advanced_concealing"),
-    {
-      desc = "[DEV] Test advanced concealing techniques",
-    }
-  )
-end
-
 -- Health check command for easier discovery
 vim.api.nvim_create_user_command("PhantomHealth", function()
   vim.cmd("checkhealth phantom-err")
@@ -151,4 +120,3 @@ vim.api.nvim_create_user_command("PhantomLogView", function()
 end, {
   desc = "View phantom-err debug log",
 })
-

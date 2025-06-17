@@ -22,83 +22,91 @@ function M.setup(opts)
   config.setup(opts)
 
   local options = config.get()
-  if options.auto_enable then
-    local auto_enable_group = vim.api.nvim_create_augroup("phantom_err_auto_enable", { clear = true })
 
-    -- Set up autocmd to automatically enable on Go files
-    vim.api.nvim_create_autocmd("FileType", {
-      pattern = "go",
-      callback = function()
-        local winid = vim.api.nvim_get_current_win()
-        local bufnr = vim.api.nvim_get_current_buf()
-        vim.defer_fn(function()
-          if
-            vim.api.nvim_win_is_valid(winid)
-            and vim.api.nvim_buf_is_valid(bufnr)
-            and vim.bo[bufnr].filetype == "go"
-          then
-            M.enable_window(winid)
-          end
-        end, AUTO_ENABLE_DELAY_MS)
-      end,
-      group = auto_enable_group,
-    })
+  -- Set up session-based auto-enable that works regardless of the auto_enable setting
+  local auto_enable_group = vim.api.nvim_create_augroup("phantom_err_auto_enable", { clear = true })
 
-    -- Set up autocmd to enable phantom-err when switching to a Go file window
-    vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter" }, {
-      pattern = "*.go",
-      callback = function()
-        local winid = vim.api.nvim_get_current_win()
-        local bufnr = vim.api.nvim_get_current_buf()
+  -- Helper function to check if phantom-err should be enabled for this session
+  local function should_auto_enable_for_session()
+    -- If auto_enable is explicitly set to true, always enable
+    if options.auto_enable then
+      return true
+    end
 
-        config.log_debug(
-          "init",
-          string.format(
-            "WinEnter/BufEnter event: window %d, buffer %d, enabled=%s",
-            winid,
-            bufnr,
-            tostring(state.is_enabled(winid))
-          )
+    -- If phantom-err is already enabled for any window, enable for new windows too
+    local debug_info = state.get_debug_info()
+    return debug_info.enabled_windows > 0
+  end
+
+  -- Set up autocmd to automatically enable on Go files (initial file opening)
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "go",
+    callback = function()
+      local winid = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_get_current_buf()
+
+      vim.defer_fn(function()
+        if
+          vim.api.nvim_win_is_valid(winid)
+          and vim.api.nvim_buf_is_valid(bufnr)
+          and vim.bo[bufnr].filetype == "go"
+          and should_auto_enable_for_session()
+        then
+          config.log_debug("init", string.format("Auto-enabling phantom-err for new Go file in window %d", winid))
+          M.enable_window(winid)
+        end
+      end, AUTO_ENABLE_DELAY_MS)
+    end,
+    group = auto_enable_group,
+  })
+
+  -- Set up autocmd to enable phantom-err when switching to a Go file window
+  vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter" }, {
+    pattern = "*.go",
+    callback = function()
+      local winid = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_get_current_buf()
+
+      config.log_debug(
+        "init",
+        string.format(
+          "WinEnter/BufEnter event: window %d, buffer %d, enabled=%s",
+          winid,
+          bufnr,
+          tostring(state.is_enabled(winid))
         )
+      )
 
-        -- Check if this window is already enabled
-        if not state.is_enabled(winid) and vim.bo[bufnr].filetype == "go" then
-          config.log_debug("init", string.format("Window %d not enabled for Go file, scheduling enable", winid))
+      -- Check if this window is already enabled
+      if not state.is_enabled(winid) and vim.bo[bufnr].filetype == "go" then
+        -- Check if we should auto-enable for this session
+        if should_auto_enable_for_session() then
+          config.log_debug(
+            "init",
+            string.format("Window %d not enabled for Go file, scheduling session-based enable", winid)
+          )
           vim.defer_fn(function()
             if
               vim.api.nvim_win_is_valid(winid)
               and vim.api.nvim_buf_is_valid(bufnr)
               and vim.bo[bufnr].filetype == "go"
             then
-              config.log_debug("init", string.format("Auto-enabling phantom-err for window %d on switch", winid))
+              config.log_debug("init", string.format("Session-based auto-enabling phantom-err for window %d", winid))
               M.enable_window(winid)
             end
           end, AUTO_ENABLE_DELAY_MS)
         else
-          config.log_debug("init", string.format("Window %d already enabled or not Go file", winid))
+          config.log_debug(
+            "init",
+            string.format("Window %d not enabled and no session-based auto-enable needed", winid)
+          )
         end
-      end,
-      group = auto_enable_group,
-    })
-  end
-end
-
-function M.set_fold_errors(enabled)
-  local opts = config.get()
-  opts.fold_errors = enabled
-  config.options = opts
-end
-
-function M.set_single_line_mode(mode)
-  local opts = config.get()
-  opts.single_line_mode = mode
-  config.options = opts
-end
-
-function M.set_auto_reveal_mode(mode)
-  local opts = config.get()
-  opts.auto_reveal_mode = mode
-  config.options = opts
+      else
+        config.log_debug("init", string.format("Window %d already enabled or not Go file", winid))
+      end
+    end,
+    group = auto_enable_group,
+  })
 end
 
 function M.toggle()
