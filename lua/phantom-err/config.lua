@@ -71,7 +71,7 @@ M.log_message = log_message
 
 M.defaults = {
   -- Automatically enable phantom-err when opening Go files
-  auto_enable = false,
+  auto_enable = auto,
 
   -- Display mode for error blocks:
   -- - "fold": Use folding to completely hide error blocks (most aggressive)
@@ -83,7 +83,7 @@ M.defaults = {
   -- - "conceal": Dim with Conceal highlight group
   -- - "comment": Dim with Comment highlight group
   -- - "none": No dimming applied
-  dimming_mode = "conceal",
+  dimming_mode = "comment",
 
   -- How to display error blocks when cursor enters them (reveal mode):
   -- - "normal": Fully reveal the block (disable dimming/concealing)

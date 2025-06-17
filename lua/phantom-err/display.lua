@@ -741,9 +741,12 @@ end
 
 -- Set up dimmed highlighting for fold text
 function M.setup_fold_highlighting()
-  -- Create a dimmed highlight group for fold text
+  local opts = config.get()
+  local hl_group = opts.dimming_mode == "comment" and "Comment" or "Conceal"
+
+  -- Create a dimmed highlight group for fold text that honors the dimming mode
   vim.api.nvim_set_hl(0, "PhantomErrFold", {
-    link = "Conceal", -- Use the same highlighting as comments (dimmed)
+    link = hl_group,
   })
 
   -- Set the fold highlight group

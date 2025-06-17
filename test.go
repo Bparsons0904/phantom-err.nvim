@@ -76,7 +76,6 @@ func main() {
 
 	fmt.Printf("Successfully processed user: %s\n", user.Name)
 
-	// Complex inline error handling case - should only dim the error handling content
 	subAccountID := "test-account"
 	var priorMeetings []Meeting
 	if err := database.DB.
