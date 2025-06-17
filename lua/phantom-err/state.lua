@@ -116,6 +116,13 @@ function M.cleanup_buffer(bufnr)
   for _, winid in ipairs(cleaned_windows) do
     M.cleanup_window(winid)
   end
+
+  -- Clean up display effects for this buffer
+  -- We need to use a lazy require to avoid circular dependency
+  local ok, display = pcall(require, "phantom-err.display")
+  if ok and display.cleanup_buffer_before_close then
+    display.cleanup_buffer_before_close(bufnr)
+  end
 end
 
 -- Clean up invalid/closed windows
@@ -158,9 +165,10 @@ end
 -- Set up autocmds for cleanup
 local cleanup_group = vim.api.nvim_create_augroup("phantom_err_state_cleanup", { clear = true })
 
-vim.api.nvim_create_autocmd("BufDelete", {
+vim.api.nvim_create_autocmd({"BufDelete", "BufUnload"}, {
   group = cleanup_group,
   callback = function(args)
+    config.log_debug("state", string.format("Buffer %d is being %s, cleaning up", args.buf, args.event))
     M.cleanup_buffer(args.buf)
   end,
 })

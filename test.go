@@ -85,8 +85,9 @@ func main() {
 		Order("meeting_period_start DESC").
 		Find(&priorMeetings).Error; err != nil {
 		slog.Error("Error getting meeting members", "error", err)
-		return c.Status(fiber.StatusInternalServerError).
-			JSON(fiber.Map{"status": "error", "message": "Error getting meeting members", "error": err})
+		c.Status(fiber.StatusInternalServerError).
+			JSON(FiberMap{"status": "error", "message": "Error getting meeting members", "error": err})
+		return
 	}
 }
 
@@ -204,8 +205,8 @@ func WithQSMMeetingRelations() {}
 
 var fiber = struct {
 	StatusInternalServerError int
-	Map                       func(map[string]interface{}) FiberMap
+	Map                       FiberMap
 }{
 	StatusInternalServerError: 500,
-	Map:                       func(m map[string]interface{}) FiberMap { return FiberMap(m) },
+	Map:                       FiberMap{},
 }

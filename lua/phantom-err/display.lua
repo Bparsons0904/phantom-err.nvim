@@ -194,6 +194,45 @@ function M.show_all(bufnr)
   pcall(M.clear_conceals, bufnr)
 end
 
+-- Clean up all phantom-err effects before buffer closes
+function M.cleanup_buffer_before_close(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  config.log_debug("display", string.format("Cleaning up buffer %d before close", bufnr))
+  
+  -- Clear all extmarks (conceals, dimming, etc.)
+  pcall(function()
+    vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
+  end)
+
+  -- Clear all folds we created
+  pcall(function()
+    local wins = vim.fn.win_findbuf(bufnr)
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_call(win, function()
+          -- Clear all folds
+          vim.cmd("silent! normal! zE")
+          -- Reset fold settings to defaults
+          vim.wo.foldmethod = "manual"
+          vim.wo.foldtext = ""
+        end)
+      end
+    end
+  end)
+
+  -- Clear stored fold texts for this buffer
+  for key, _ in pairs(fold_texts) do
+    if key:match("^" .. bufnr .. "_") then
+      fold_texts[key] = nil
+    end
+  end
+
+  config.log_debug("display", string.format("Completed cleanup for buffer %d", bufnr))
+end
+
 -- Helper function to determine if dimming should be applied based on new config structure
 local function should_apply_dimming(is_cursor_in_error_context, opts)
   if opts.dimming_mode == "none" then
