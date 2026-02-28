@@ -38,34 +38,40 @@ CONFIGURATION                                    *phantom-err-configuration*
 
 Setup function: >
     require('phantom-err').setup({
-      enabled = true,
-      mode = "conceal", -- "marker" | "single_line" | "conceal"
-      marker = {
-        symbol = "⚠",
-        hl_group = "Comment"
-      },
-      auto_reveal = {
-        in_scope = false,
-        in_block = false
-      },
-      patterns = {
-        basic = true,
-        inline = false
-      }
+      auto_enable = false,
+      mode = "full",         -- "fold" | "compressed" | "full"
+      dimming_mode = "conceal", -- "conceal" | "comment" | "none"
+      reveal_mode = "normal",   -- "normal" | "comment" | "conceal"
+      log_level = "off"      -- "debug" | "info" | "warn" | "error" | "off"
     })
 <
 
 ==============================================================================
 COMMANDS                                              *phantom-err-commands*
 
-:GoErrorToggle                                            *:GoErrorToggle*
-    Toggle Go error handling visibility
+:PhantomToggle                                          *:PhantomToggle*
+    Toggle phantom-err effects for the current Go window
 
-:GoErrorShow                                                *:GoErrorShow*
-    Show all Go error handling blocks
+:PhantomShow                                              *:PhantomShow*
+    Show all error blocks (disable phantom effects)
 
-:GoErrorHide                                                *:GoErrorHide*
-    Hide all Go error handling blocks
+:PhantomHide                                              *:PhantomHide*
+    Hide error blocks (enable phantom effects)
+
+:PhantomHealth                                          *:PhantomHealth*
+    Run the built-in health check
+
+:PhantomDebug                                            *:PhantomDebug*
+    Print internal window and buffer state
+
+:PhantomLogLevel [level]                              *:PhantomLogLevel*
+    Get or set the debug log level
+
+:PhantomLogClear                                      *:PhantomLogClear*
+    Clear /tmp/phantom-err.log
+
+:PhantomLogView                                        *:PhantomLogView*
+    Open /tmp/phantom-err.log in a new tab
 
 ==============================================================================
 API                                                        *phantom-err-api*

@@ -88,10 +88,12 @@ function M.check()
       vim.health.ok("Configuration is valid")
       vim.health.info(
         string.format(
-          "Current config: auto_enable=%s, fold_errors=%s, single_line_mode=%s",
+          "Current config: auto_enable=%s, mode=%s, dimming_mode=%s, reveal_mode=%s, log_level=%s",
           tostring(opts.auto_enable),
-          tostring(opts.fold_errors),
-          opts.single_line_mode
+          opts.mode,
+          opts.dimming_mode,
+          opts.reveal_mode,
+          opts.log_level
         )
       )
     else
@@ -219,11 +221,13 @@ function M.check()
   -- Final summary
   vim.health.start("phantom-err: Usage")
   vim.health.info("Commands available:")
-  vim.health.info("  :GoErrorToggle - Toggle error hiding")
-  vim.health.info("  :GoErrorHide   - Hide all error blocks")
-  vim.health.info("  :GoErrorShow   - Show all error blocks")
+  vim.health.info("  :PhantomToggle   - Toggle phantom effects")
+  vim.health.info("  :PhantomHide     - Hide error blocks")
+  vim.health.info("  :PhantomShow     - Show error blocks")
+  vim.health.info("  :PhantomHealth   - Run this health check")
+  vim.health.info("  :PhantomDebug    - Print debug information")
+  vim.health.info("  :PhantomLogLevel - Get or set the log level")
   vim.health.info("  :checkhealth phantom-err - Run this health check")
 end
 
 return M
-

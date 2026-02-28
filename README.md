@@ -86,7 +86,7 @@ require('phantom-err').setup({
   -- - "fold": Use folding to completely hide error blocks (most aggressive)
   -- - "compressed": Compress error blocks to single line with overlay text
   -- - "full": Show full error blocks (apply dimming only)
-  mode = "compressed",
+  mode = "full",
 
   -- Dimming mode applied to error blocks:
   -- - "conceal": Dim with Conceal highlight group
@@ -99,6 +99,10 @@ require('phantom-err').setup({
   -- - "comment": Keep dimmed with Comment highlight
   -- - "conceal": Keep dimmed with Conceal highlight
   reveal_mode = "normal",
+
+  -- Debug logging level:
+  -- - "debug", "info", "warn", "error", "off"
+  log_level = "off",
 })
 ```
 
@@ -183,7 +187,9 @@ Automatically enables on Go files. Error blocks are always dimmed with comment h
 | `:PhantomHide`     | Hide error blocks (enable effects)      |
 | `:PhantomHealth`   | Run health check and diagnostics        |
 | `:PhantomDebug`    | Show debug information                  |
-| `:PhantomLogLevel` | Get/set log level (debug, info, warn)   |
+| `:PhantomLogLevel` | Get/set log level                       |
+| `:PhantomLogClear` | Clear the debug log file                |
+| `:PhantomLogView`  | Open the debug log file in a new tab    |
 
 ### Suggested Key Bindings
 
@@ -247,7 +253,7 @@ if nil != err {
 }
 ```
 
-### Future: Inline Patterns (Planned)
+### Inline Error Handling
 
 ```go
 if err := someOperation(); err != nil {
@@ -278,10 +284,6 @@ The buffer content remains completely unchanged, ensuring:
 - Tree-sitter Go parser (`TSInstall go`)
 
 ## Development Status
-
-Currently in active development. The core functionality is stable and ready for daily use.
-
-### Development Status
 
 Currently in active development. The core functionality is stable and ready for daily use.
 
